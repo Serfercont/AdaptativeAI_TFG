@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "Perception/AIPerceptionTypes.h"
+#include "Perception/AIPerceptionComponent.h"
 #include "BaseAIController.generated.h"
 
 

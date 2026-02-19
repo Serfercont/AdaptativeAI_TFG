@@ -3,6 +3,8 @@
 #include "AI/BaseAIController.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "Perception/AIPerceptionTypes.h"
+#include "Scripts_TFG/EnemyBase.h"
 
 ABaseAIController::ABaseAIController(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -19,6 +21,7 @@ void ABaseAIController::BeginPlay()
     }
 }
 
+// Function to handle perception updates, setting the target actor and last known location in the blackboard, and updating the enemy's movement state
 void ABaseAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
 	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
@@ -28,14 +31,23 @@ void ABaseAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
         return;
     }
 
+	AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn());
+
     if (Actor && Stimulus.WasSuccessfullySensed())
     {
 		BlackboardComp->SetValueAsObject(TEXT("TargetActor"), Actor);
+		BlackboardComp->SetValueAsVector(TEXT("LastKnownLocation"), Actor->GetActorLocation());
+        if(Enemy)
+        {
+            Enemy->SetMovementState(true);
+		}
     }
-
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Actor %s was lost!"), *Actor->GetName());
         BlackboardComp->ClearValue(TEXT("TargetActor"));
+        if (Enemy)
+        {
+            Enemy->SetMovementState(false);
+        }
     }
 }

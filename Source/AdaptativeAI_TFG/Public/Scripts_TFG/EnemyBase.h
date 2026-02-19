@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "EnemyBase.generated.h"
 
 UCLASS()
@@ -14,6 +15,18 @@ class ADAPTATIVEAI_TFG_API AEnemyBase : public ACharacter
 public:
 	// Sets default values for this character's properties
 	AEnemyBase();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI | Movement")
+	float WalkSpeed;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI | Movement")
+	float RunMultiplier;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI | Movement")
+	float TurnRate;
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Movement")
+	void SetMovementState(bool bIsChasing);
 
 protected:
 	// Called when the game starts or when spawned
