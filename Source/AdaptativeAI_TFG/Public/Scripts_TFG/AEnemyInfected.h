@@ -17,6 +17,11 @@ class ADAPTATIVEAI_TFG_API AAEnemyInfected : public AEnemyBase
 public:
 	AAEnemyInfected();
 
+protected:
+	virtual void BeginPlay() override;
+
+public:
+
 	UPROPERTY(EditAnywhere, Category = "AI | Abilities")
 	float AlertCooldown;
 
@@ -53,6 +58,15 @@ public:
 	UPROPERTY(EditAnywhere, Category = "AI | Utility")
 	float SoundInvestigatePriority;
 
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
+	//Utility AI
+	UFUNCTION()
+	void EvaluateUtilityScores();
+
+	void UpdateBlackboardValues();
+
+	FTimerHandle UtilityTimerHandle;
 
 	// Active when one infected detects the player, making nearby infected aware of the player's presence for a short time
 	void PerformLaCrida();

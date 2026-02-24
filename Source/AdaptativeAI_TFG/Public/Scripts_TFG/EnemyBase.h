@@ -44,6 +44,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI | Combat")
 	float AttackCooldown;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI | Vital")
+	float MaxHealth;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI | Vital")
+	float CurrentHealth;
+
 	UFUNCTION(BlueprintCallable, Category = "AI | Movement")
 	void SetMovementState(bool bIsChasing);
 
