@@ -26,14 +26,20 @@ void ABaseAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
 	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
 
-    if (!BlackboardComp)
+    if (!BlackboardComp || !Actor)
     {
         return;
     }
 
 	AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn());
+	APawn* PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn();
 
-    if (Actor && Stimulus.WasSuccessfullySensed())
+    if (Actor != PlayerPawn)
+    {
+		return;
+    }
+
+    if (Stimulus.WasSuccessfullySensed())
     {
 		BlackboardComp->SetValueAsObject(TEXT("TargetActor"), Actor);
 		BlackboardComp->SetValueAsVector(TEXT("LastKnownLocation"), Actor->GetActorLocation());

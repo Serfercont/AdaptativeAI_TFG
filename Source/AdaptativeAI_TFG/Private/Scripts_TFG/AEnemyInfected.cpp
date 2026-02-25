@@ -11,12 +11,14 @@ AAEnemyInfected::AAEnemyInfected()
 {
 	MaxHealth = 100.f;
 	CurrentHealth = MaxHealth;
+	AlertRadius = 5000.f;
 }
 
 void AAEnemyInfected::BeginPlay()
 {
 	Super::BeginPlay();
 
+	UpdateBlackboardValues();
 	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this, &AAEnemyInfected::EvaluateUtilityScores, 0.5f, true);
 }
 
@@ -65,6 +67,8 @@ void AAEnemyInfected::EvaluateUtilityScores()
 
 	float FleeUtilityFinal = FleeBaseWeight * FleeCurveValue * AdapatativeMultiplier;
 	FleeUtilityFinal = FMath::Clamp(FleeUtilityFinal, 0.0f, 1.0f);
+
+	UpdateBlackboardValues();
 }
 
 void AAEnemyInfected::UpdateBlackboardValues()
@@ -95,8 +99,30 @@ void AAEnemyInfected::UpdateBlackboardValues()
 	}
 }
 
-void AAEnemyInfected::PerformLaCrida()
+void AAEnemyInfected::PerformLaCrida(AActor* TargetPlayer)
 {
+	if (!TargetPlayer)
+	{
+		return;
+	}
+
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AAEnemyInfected::StaticClass(), FoundActors);
+
+	for (AActor* Actor : FoundActors)
+	{
+		if (Actor != this && FVector::Dist(Actor->GetActorLocation(), GetActorLocation()) <= AlertRadius)
+		{
+			AAIController* AllyAI = Cast<AAIController>(Cast<APawn>(Actor)->GetController());
+			if (AllyAI && AllyAI->GetBlackboardComponent())
+			{
+				AllyAI->GetBlackboardComponent()->SetValueAsObject("TargetActor", TargetPlayer);
+				AllyAI->GetBlackboardComponent()->SetValueAsBool("IsAlerted", true);
+				AllyAI->GetBlackboardComponent()->SetValueAsVector("LastKnownLocation", TargetPlayer->GetActorLocation());
+				AllyAI->GetBlackboardComponent()->SetValueAsBool("HasPerformedCrida", true);
+			}
+		}
+	}
 }
 
 void AAEnemyInfected::ThrowObject()

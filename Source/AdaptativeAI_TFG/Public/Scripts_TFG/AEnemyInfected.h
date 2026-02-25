@@ -69,7 +69,8 @@ public:
 	FTimerHandle UtilityTimerHandle;
 
 	// Active when one infected detects the player, making nearby infected aware of the player's presence for a short time
-	void PerformLaCrida();
+	UFUNCTION(BlueprintCallable, Category = "AI | Abilities")
+	void PerformLaCrida(AActor* TargetPlayer);
 
 	// Active when the player abuse of height advantage and close-distance weapons, making the infected throw objects at the player
 	void ThrowObject();
