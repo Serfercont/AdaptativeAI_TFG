@@ -5,6 +5,7 @@
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/StaticMeshComponent.h"
 
 
 AAEnemyInfected::AAEnemyInfected()
@@ -78,10 +79,11 @@ void AAEnemyInfected::UpdateBlackboardValues()
 	if (AIController && AIController->GetBlackboardComponent())
 	{
 		UBlackboardComponent* BlackboardComp = AIController->GetBlackboardComponent();
-
+		//HealthPct
 		float HealthPct = CurrentHealth / MaxHealth;
 		AIController->GetBlackboardComponent()->SetValueAsFloat("SelfHealthPct", HealthPct);
 
+		//NearbyAllies
 		int32 AlliesCount = 0;
 		TArray<AActor*> FoundActors;
 
@@ -96,6 +98,18 @@ void AAEnemyInfected::UpdateBlackboardValues()
 		}
 
 		BlackboardComp->SetValueAsInt("NearbyAllies", AlliesCount);
+
+		//TargetActor
+		AActor* TargetActor = Cast<AActor>(BlackboardComp->GetValueAsObject("TargetActor"));
+
+		if (TargetActor)
+		{
+			float HeightDifference = TargetActor->GetActorLocation().Z - GetActorLocation().Z;
+			float Distance2D = FVector::Dist2D(TargetActor->GetActorLocation(), GetActorLocation());
+			bool bIsUnreachable = HeightDifference > 200.0f && ((Distance2D > MinThrowDistance) && (Distance2D < MaxThrowDistance));
+
+			BlackboardComp->SetValueAsBool("IsPlayerUnreachable", bIsUnreachable);
+		}
 	}
 }
 
@@ -125,8 +139,36 @@ void AAEnemyInfected::PerformLaCrida(AActor* TargetPlayer)
 	}
 }
 
-void AAEnemyInfected::ThrowObject()
+void AAEnemyInfected::ThrowObject(AActor* TargetPlayer)
 {
+	if (!TargetPlayer || !StoneProjectileClass)
+	{
+		return;
+	}
+
+	FVector SpawnLocation = GetActorLocation() + FVector(0, 0, 0);
+	FVector EndLocation = TargetPlayer->GetActorLocation();
+	FVector LaunchVelocity;
+
+	bool bSuccess = UGameplayStatics::SuggestProjectileVelocity_CustomArc(this, LaunchVelocity, SpawnLocation, EndLocation, 0.f, 0.5f);
+
+	if (bSuccess)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		
+		AActor* Projectile = GetWorld()->SpawnActor<AActor>(StoneProjectileClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+
+		if (Projectile)
+		{
+			UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Projectile->GetComponentByClass(UStaticMeshComponent::StaticClass()));
+			if (MeshComp)
+			{
+				MeshComp->SetSimulatePhysics(true);
+				MeshComp->SetPhysicsLinearVelocity(LaunchVelocity);
+			}
+		}
+	}
 }
 
 void AAEnemyInfected::Dodge()

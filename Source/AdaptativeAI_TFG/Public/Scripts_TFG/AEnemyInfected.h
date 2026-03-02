@@ -50,10 +50,16 @@ public:
 	float MinThrowDistance;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Throw")
+	float MaxThrowDistance;
+
+	UPROPERTY(EditAnywhere, Category = "AI | Throw")
 	float ThrowCooldown;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Throw")
 	float ThrowPrecision;
+
+	UPROPERTY(EditAnywhere, Category = "AI | Throw")
+	TSubclassOf<AActor> StoneProjectileClass;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Utility")
 	float SoundInvestigatePriority;
@@ -73,7 +79,8 @@ public:
 	void PerformLaCrida(AActor* TargetPlayer);
 
 	// Active when the player abuse of height advantage and close-distance weapons, making the infected throw objects at the player
-	void ThrowObject();
+	UFUNCTION(BlueprintCallable, Category = "AI | Throw")
+	void ThrowObject(AActor* TargetPlayer);
 
 	// Active while chasing the player, doing zig-zag movements to make it harder to hit them with ranged weapons, and to avoid melee attacks  
 	void Dodge();
