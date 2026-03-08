@@ -91,7 +91,7 @@ void AAEnemyInfected::UpdateBlackboardValues()
 
 		for (AActor* Actor : FoundActors)
 		{
-			if (Actor != this && FVector::Dist(Actor->GetActorLocation(), GetActorLocation()) <= 1000.0f)
+			if (Actor != this && FVector::Dist(Actor->GetActorLocation(), GetActorLocation()) <= 2500.0f)
 			{
 				AlliesCount++;
 			}
@@ -108,6 +108,7 @@ void AAEnemyInfected::UpdateBlackboardValues()
 			float Distance2D = FVector::Dist2D(TargetActor->GetActorLocation(), GetActorLocation());
 			bool bIsUnreachable = HeightDifference > 200.0f && ((Distance2D > MinThrowDistance) && (Distance2D < MaxThrowDistance));
 
+			BlackboardComp->SetValueAsFloat("DistanceToPlayer", Distance2D);
 			BlackboardComp->SetValueAsBool("IsPlayerUnreachable", bIsUnreachable);
 		}
 	}
@@ -191,8 +192,23 @@ void AAEnemyInfected::NearbyAttack()
 {
 }
 
-void AAEnemyInfected::FinalAttackJump()
+void AAEnemyInfected::FinalAttackJump(AActor* TargetPlayer)
 {
+	if (!TargetPlayer)
+	{
+		return;
+	}
+
+	FVector StartLocation = GetActorLocation();
+	FVector EndLocation = TargetPlayer->GetActorLocation();
+	FVector LaunchVelocity;
+
+	bool bSuccess = UGameplayStatics::SuggestProjectileVelocity_CustomArc(this, LaunchVelocity, StartLocation, EndLocation, 0.f, 0.5f);
+
+	if (bSuccess)
+	{
+		LaunchCharacter(LaunchVelocity, true, true);
+	}	
 }
 
 void AAEnemyInfected::RunAway()

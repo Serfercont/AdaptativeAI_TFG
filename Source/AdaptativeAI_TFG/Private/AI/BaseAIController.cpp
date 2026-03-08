@@ -5,6 +5,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Perception/AIPerceptionTypes.h"
 #include "Scripts_TFG/EnemyBase.h"
+#include "Scripts_TFG/AEnemyInfected.h"
 
 ABaseAIController::ABaseAIController(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -41,6 +42,7 @@ void ABaseAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 
     if (Stimulus.WasSuccessfullySensed())
     {
+		BlackboardComp->SetValueAsBool(TEXT("IsPlayerVisible"), true);
 		BlackboardComp->SetValueAsObject(TEXT("TargetActor"), Actor);
 		BlackboardComp->SetValueAsVector(TEXT("LastKnownLocation"), Actor->GetActorLocation());
         if(Enemy)
@@ -50,9 +52,11 @@ void ABaseAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
     }
     else
     {
-        BlackboardComp->ClearValue(TEXT("TargetActor"));
-        if (Enemy)
-        {
+		BlackboardComp->SetValueAsBool(TEXT("IsPlayerVisible"), false);
+        
+        if (Enemy && !Enemy->IsA(AAEnemyInfected::StaticClass()))
+        { 
+            BlackboardComp->ClearValue(TEXT("TargetActor"));
             Enemy->SetMovementState(false);
         }
     }

@@ -98,7 +98,8 @@ public:
 	void NearbyAttack();
 
 	// Active when the health of the infected is low, doing a powerful jump attack that can hit the player from a distance.
-	void FinalAttackJump();
+	UFUNCTION(BlueprintCallable, Category = "AI | Abilities")
+	void FinalAttackJump(AActor* TargetPlayer);
 
 	// Active when an infected is low on health or alone, it will escape to other infected group.
 	void RunAway();
