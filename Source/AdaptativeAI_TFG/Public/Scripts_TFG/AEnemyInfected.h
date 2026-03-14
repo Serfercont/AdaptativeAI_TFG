@@ -22,6 +22,15 @@ protected:
 
 public:
 
+	struct FDamageRecord {
+		float Damage;
+		float Timestamp;
+	};
+
+	static TArray<FDamageRecord> GlobalDamageRecords;
+	static void RecordGlobalDamage(float DamageAmount, float CurrentTime);
+	static float GetRecentGlobalDamage(float CurrentTime, float TimeWindow);
+
 	UPROPERTY(EditAnywhere, Category = "AI | Abilities")
 	float AlertCooldown;
 
@@ -64,6 +73,12 @@ public:
 	UPROPERTY(EditAnywhere, Category = "AI | Utility")
 	float SoundInvestigatePriority;
 
+	UPROPERTY(EditAnywhere, Category = "AI | Dodge")
+	bool bIsDodging;
+
+	float DodgeEndTime;
+	float LastDodgeTime;
+
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
 	//Utility AI
@@ -83,7 +98,8 @@ public:
 	void ThrowObject(AActor* TargetPlayer);
 
 	// Active while chasing the player, doing zig-zag movements to make it harder to hit them with ranged weapons, and to avoid melee attacks  
-	void Dodge();
+	UFUNCTION(BlueprintCallable, Category = "AI | Abilities")
+	FVector CalculateDodgeLocation(AActor* TargetPlayer);
 
 	// Active when the infected is low on health, increasing its speed and damage for a short time, but making it more vulnerable to attacks
 	void EnterFuryMode();
@@ -100,7 +116,4 @@ public:
 	// Active when the health of the infected is low, doing a powerful jump attack that can hit the player from a distance.
 	UFUNCTION(BlueprintCallable, Category = "AI | Abilities")
 	void FinalAttackJump(AActor* TargetPlayer);
-
-	// Active when an infected is low on health or alone, it will escape to other infected group.
-	void RunAway();
 };

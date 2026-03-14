@@ -6,13 +6,17 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/StaticMeshComponent.h"
+#include "NavigationSystem.h"
+#include "DrawDebugHelpers.h"
 
-
+TArray<AAEnemyInfected::FDamageRecord> AAEnemyInfected::GlobalDamageRecords;
 AAEnemyInfected::AAEnemyInfected()
 {
 	MaxHealth = 100.f;
 	CurrentHealth = MaxHealth;
 	AlertRadius = 5000.f;
+	bIsDodging = false;
+	LastDodgeTime = -10.f;
 }
 
 void AAEnemyInfected::BeginPlay()
@@ -23,6 +27,29 @@ void AAEnemyInfected::BeginPlay()
 	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this, &AAEnemyInfected::EvaluateUtilityScores, 0.5f, true);
 }
 
+void AAEnemyInfected::RecordGlobalDamage(float DamageAmount, float CurrentTime)
+{
+	GlobalDamageRecords.Add({DamageAmount, CurrentTime });
+}
+
+float AAEnemyInfected::GetRecentGlobalDamage(float CurrentTime, float TimeWindow)
+{
+	float TotalDamage = 0.f;
+
+	for (int i = GlobalDamageRecords.Num() - 1; i >= 0; i--)
+	{
+		if (CurrentTime - GlobalDamageRecords[i].Timestamp <= TimeWindow)
+		{
+			TotalDamage += GlobalDamageRecords[i].Damage;
+		}
+		else
+		{
+			GlobalDamageRecords.RemoveAt(i);
+		}
+	}
+	return TotalDamage;
+}
+
 float AAEnemyInfected::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
@@ -30,6 +57,7 @@ float AAEnemyInfected::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 	CurrentHealth -= ActualDamage;
 	CurrentHealth = FMath::Clamp(CurrentHealth, 0.f, MaxHealth);
 
+	RecordGlobalDamage(ActualDamage, GetWorld()->GetTimeSeconds());
 	UpdateBlackboardValues();
 
 	if (CurrentHealth <= 0.f)
@@ -111,6 +139,36 @@ void AAEnemyInfected::UpdateBlackboardValues()
 			BlackboardComp->SetValueAsFloat("DistanceToPlayer", Distance2D);
 			BlackboardComp->SetValueAsBool("IsPlayerUnreachable", bIsUnreachable);
 		}
+
+		//Dodge Logic
+		float CurrentTime = GetWorld()->GetTimeSeconds();
+		float RecentDamage = GetRecentGlobalDamage(CurrentTime, 2.f);
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(1, 0.5f, FColor::Yellow, FString::Printf(TEXT("Daño global (2s): %f"), RecentDamage));
+		}
+
+		if (!bIsDodging && RecentDamage >= 100.f)
+		{
+			if (CurrentTime > LastDodgeTime + 2.f)
+			{
+				bIsDodging = true;
+				DodgeEndTime = CurrentTime + 10.f;
+
+				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("¡ESQUIVAR ACTIVADO!"));
+			}
+		}
+
+		if (bIsDodging && CurrentTime > DodgeEndTime)
+		{
+			bIsDodging = false;
+			LastDodgeTime = CurrentTime;
+
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("ESQUIVAR Terminado. Cooldown de 2s."));
+		}
+
+		BlackboardComp->SetValueAsBool("IsDodging", bIsDodging);
 	}
 }
 
@@ -172,8 +230,52 @@ void AAEnemyInfected::ThrowObject(AActor* TargetPlayer)
 	}
 }
 
-void AAEnemyInfected::Dodge()
+FVector AAEnemyInfected::CalculateDodgeLocation(AActor* TargetPlayer)
 {
+	if (!TargetPlayer)
+	{
+		return GetActorLocation();
+	}
+
+	FVector MyLocation = GetActorLocation();
+	FVector PlayerLocation = TargetPlayer->GetActorLocation();
+
+	FVector ToPlayer = PlayerLocation - MyLocation;
+	ToPlayer.Z = 0.f;
+
+	float DistanceToPlayer = ToPlayer.Size2D();
+
+	if (DistanceToPlayer < LungeDistance + 150.f)
+	{
+		return PlayerLocation;
+	}
+	ToPlayer.Normalize();
+
+	FVector RightVector = FVector::CrossProduct(ToPlayer, FVector::UpVector);
+
+	float RandomDirection = FMath::RandBool() ? 1.f : -1.f;
+	float DodgeAmplitude = FMath::RandRange(150.f, 220.f);
+	float ForwardOffset = FMath::RandRange(350.f, 650.f);
+
+	if (DistanceToPlayer < ForwardOffset)
+	{
+		ForwardOffset = DistanceToPlayer * 0.5f;
+	}
+
+	FVector DodgeLocation = MyLocation + (ToPlayer * ForwardOffset) + (RightVector * RandomDirection * DodgeAmplitude);
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	FNavLocation NavLocation;
+
+	if (NavSys && NavSys->ProjectPointToNavigation(DodgeLocation, NavLocation, FVector(500.f, 500.f, 500.f)))
+	{
+		DrawDebugSphere(GetWorld(), NavLocation.Location, 50.f, 12, FColor::Red, false, 2.f);
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, TEXT("Nueva posicion de esquivar"));
+
+		return NavLocation.Location;
+	}
+
+	return PlayerLocation;
 }
 
 void AAEnemyInfected::EnterFuryMode()
@@ -201,16 +303,44 @@ void AAEnemyInfected::FinalAttackJump(AActor* TargetPlayer)
 
 	FVector StartLocation = GetActorLocation();
 	FVector EndLocation = TargetPlayer->GetActorLocation();
+	FVector PlayerLocation = TargetPlayer->GetActorLocation();
+
+	//Prediction
+
+	FVector PlayerVelocity = TargetPlayer->GetVelocity();
+	PlayerVelocity.Z = 0.f;
+
+	if (PlayerVelocity.SizeSquared() > 100.f)
+	{
+		float DistanceToPlayer = FVector::Dist2D(StartLocation, PlayerLocation);
+		float EstimatedFlightTime = DistanceToPlayer / 800.f;
+
+		EstimatedFlightTime = FMath::Clamp(EstimatedFlightTime, 0.5f, 1.5f);
+
+		FVector PredictedOffset = PlayerVelocity * EstimatedFlightTime;
+		FVector PredictedLocation = PlayerLocation + PredictedOffset;
+
+		PredictedOffset = PredictedOffset.GetClampedToMaxSize(400.f);
+		EndLocation = PlayerLocation + PredictedOffset;
+
+		if (GEngine)
+		{
+			DrawDebugSphere(GetWorld(), EndLocation, 30.f, 12, FColor::Orange, false, 2.f);
+			DrawDebugLine(GetWorld(), PlayerLocation, EndLocation, FColor::Orange, false, 2.f, 0, 2.f);
+		}
+
+	}
+
+	//Jump Calculation
 	FVector LaunchVelocity;
 
 	bool bSuccess = UGameplayStatics::SuggestProjectileVelocity_CustomArc(this, LaunchVelocity, StartLocation, EndLocation, 0.f, 0.5f);
 
 	if (bSuccess)
 	{
+		LaunchVelocity *= 1.1f;
 		LaunchCharacter(LaunchVelocity, true, true);
 	}	
 }
 
-void AAEnemyInfected::RunAway()
-{
-}
+
