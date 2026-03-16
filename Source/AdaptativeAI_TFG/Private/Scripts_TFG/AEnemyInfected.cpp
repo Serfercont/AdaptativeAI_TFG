@@ -16,7 +16,10 @@ AAEnemyInfected::AAEnemyInfected()
 	CurrentHealth = MaxHealth;
 	AlertRadius = 5000.f;
 	bIsDodging = false;
-	LastDodgeTime = -10.f;
+	LastDodgeTime = -15.f;
+	Damage = 20.f;
+	AttackRange = 150.f;
+	AttackCooldown = 1.5f;
 }
 
 void AAEnemyInfected::BeginPlay()
@@ -149,14 +152,12 @@ void AAEnemyInfected::UpdateBlackboardValues()
 			GEngine->AddOnScreenDebugMessage(1, 0.5f, FColor::Yellow, FString::Printf(TEXT("Daño global (2s): %f"), RecentDamage));
 		}
 
-		if (!bIsDodging && RecentDamage >= 100.f)
+		if (!bIsDodging && RecentDamage >= 50.f)
 		{
 			if (CurrentTime > LastDodgeTime + 2.f)
 			{
 				bIsDodging = true;
-				DodgeEndTime = CurrentTime + 10.f;
-
-				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("¡ESQUIVAR ACTIVADO!"));
+				DodgeEndTime = CurrentTime + 15.f;
 			}
 		}
 
@@ -164,11 +165,16 @@ void AAEnemyInfected::UpdateBlackboardValues()
 		{
 			bIsDodging = false;
 			LastDodgeTime = CurrentTime;
-
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("ESQUIVAR Terminado. Cooldown de 2s."));
 		}
 
 		BlackboardComp->SetValueAsBool("IsDodging", bIsDodging);
+
+		//Fury Mode Logic
+		if (!bIsFuryMode && HealthPct <= 0.2f)
+		 {
+			 EnterFuryMode();
+			 BlackboardComp->SetValueAsBool("IsFuryMode", true);
+		 }
 	}
 }
 
@@ -270,8 +276,6 @@ FVector AAEnemyInfected::CalculateDodgeLocation(AActor* TargetPlayer)
 	if (NavSys && NavSys->ProjectPointToNavigation(DodgeLocation, NavLocation, FVector(500.f, 500.f, 500.f)))
 	{
 		DrawDebugSphere(GetWorld(), NavLocation.Location, 50.f, 12, FColor::Red, false, 2.f);
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, TEXT("Nueva posicion de esquivar"));
-
 		return NavLocation.Location;
 	}
 
@@ -280,18 +284,30 @@ FVector AAEnemyInfected::CalculateDodgeLocation(AActor* TargetPlayer)
 
 void AAEnemyInfected::EnterFuryMode()
 {
-}
+	WalkSpeed *= FuryMultiplier;
+	Damage *= FuryMultiplier;
 
-void AAEnemyInfected::ExitFuryMode()
-{
+	SetMovementState(true);
+
 }
 
 void AAEnemyInfected::ChainAlert()
 {
 }
 
-void AAEnemyInfected::NearbyAttack()
+void AAEnemyInfected::NearbyAttack(AActor* TargetPlayer)
 {
+	if (!TargetPlayer)
+	{
+		return;
+	}
+
+	float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
+
+	if (DistanceToPlayer <= AttackRange + 50.f)
+	{
+		UGameplayStatics::ApplyDamage(TargetPlayer, Damage, GetController(), this, UDamageType::StaticClass());
+	}
 }
 
 void AAEnemyInfected::FinalAttackJump(AActor* TargetPlayer)
@@ -339,8 +355,9 @@ void AAEnemyInfected::FinalAttackJump(AActor* TargetPlayer)
 	if (bSuccess)
 	{
 		LaunchVelocity *= 1.1f;
+
 		LaunchCharacter(LaunchVelocity, true, true);
-	}	
+	}
 }
 
 

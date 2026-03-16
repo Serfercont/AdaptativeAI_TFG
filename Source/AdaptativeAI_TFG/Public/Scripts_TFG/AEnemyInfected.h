@@ -50,6 +50,9 @@ public:
 	float FuryTurnRateMultiplier;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Abilities")
+	bool bIsFuryMode;
+
+	UPROPERTY(EditAnywhere, Category = "AI | Abilities")
 	float LungeDistance;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Throw")
@@ -104,14 +107,12 @@ public:
 	// Active when the infected is low on health, increasing its speed and damage for a short time, but making it more vulnerable to attacks
 	void EnterFuryMode();
 
-	// Active when the fury mode ends, resetting the infected's speed and damage to normal values
-	void ExitFuryMode();
-
 	// Active while looking for the player, making the infected investigate noises and other stimuli in the environment, increasing its perception range and priority for a short time
 	void ChainAlert();
 
 	// Active when the player is close enough, doing a quick attack.
-	void NearbyAttack();
+	UFUNCTION(BlueprintCallable, Category = "AI | Abilities")
+	void NearbyAttack(AActor* TargetPlayer);
 
 	// Active when the health of the infected is low, doing a powerful jump attack that can hit the player from a distance.
 	UFUNCTION(BlueprintCallable, Category = "AI | Abilities")
