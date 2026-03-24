@@ -7,16 +7,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnemyBase.generated.h"
 
-UENUM(BlueprintType)
-enum class EEnemyRole : uint8
-{
-	None UMETA(DisplayName = "None"),
-	Leader UMETA(DisplayName = "Leader"),
-	Support UMETA(DisplayName = "Support"),
-	Assault UMETA(DisplayName = "Assault"),
-	Sniper UMETA(DisplayName = "Sniper")
-};
-
 UCLASS()
 class ADAPTATIVEAI_TFG_API AEnemyBase : public ACharacter
 {

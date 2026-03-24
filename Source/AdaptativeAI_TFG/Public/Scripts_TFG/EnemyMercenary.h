@@ -9,10 +9,47 @@
 /**
  * 
  */
+
+UENUM(BlueprintType)
+enum class EEnemyRole : uint8
+{
+	None UMETA(DisplayName = "None"),
+	Shotgun UMETA(DisplayName = "Shotgun"),
+	Rifle UMETA(DisplayName = "Rifle"),
+	Sniper UMETA(DisplayName = "Sniper")
+};
+
+UENUM(BlueprintType)
+enum class EPlayerStrategy : uint8
+{
+	None UMETA(DisplayName = "None"),
+	Agressive UMETA(DisplayName = "Agressive"),
+	Defensive UMETA(DisplayName = "Defensive"),
+	Silent UMETA(DisplayName = "Silent"),
+};
+
+UENUM(BlueprintType)
+enum class ESquadOrder : uint8
+{
+	None UMETA(DisplayName = "None"),
+	DefendArea UMETA(DisplayName = "Defend Area"),
+	AttackPlayer UMETA(DisplayName = "Attack Player"),
+	FreeFire UMETA(DisplayName = "Free Fire"),
+	Supression UMETA(DisplayName = "Supression"),
+	FlankLeft UMETA(DisplayName = "Flank Left"),
+	FlankRight UMETA(DisplayName = "Flank Right"),
+	CleanRoom UMETA(DisplayName = "Clean Room"),
+	TacticalRetreat UMETA(DisplayName = "Tactical Retreat"),
+	HoldPosition UMETA(DisplayName = "Hold Position"),
+};
+
 UCLASS()
 class ADAPTATIVEAI_TFG_API AEnemyMercenary : public AEnemyBase
 {
 	GENERATED_BODY()
+
+protected:
+	virtual void BeginPlay() override;
 
 public:
 
@@ -23,6 +60,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "AI | Organization")
 	int32 SquadID;
+
+	UPROPERTY(BlueprintReadWrite, Category = "AI | Organization")
+	class AEnemySquad* MySquad;
 
 	UPROPERTY(EditAnywhere, Category = "AI | WeaponStats")
 	float ReloadTime;
@@ -37,7 +77,7 @@ public:
 	float EffectiveRange;
 
 	UPROPERTY(EditAnywhere, Category = "AI | WeaponStats")
-	float AmoCount;
+	float AmmoCount;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Tactics")
 	float ReactionTime;
@@ -82,10 +122,17 @@ public:
 	float SuppressionDamageMultiplier;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Utility")
-	int PlayerStrategyPreference;
+	int32 PlayerStrategy;
 
+	UPROPERTY(BlueprintReadWrite, Category = "AI | Organization")
+	class ASquadManager* MySquadManager;
 
+	FTimerHandle UtilityTimerHandle;
 	//Functions
+
+	void UpdateBlackboardValues();
+
+	void EvaluateUtilityScores();
 
 	// Reload the weapon when the amo count is low or after a certain number of shots
 	void ReloadWeapon();
