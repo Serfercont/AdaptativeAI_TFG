@@ -22,40 +22,54 @@ void ABaseAIController::BeginPlay()
     }
 }
 
-// Function to handle perception updates, setting the target actor and last known location in the blackboard, and updating the enemy's movement state
 void ABaseAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
-	UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
+	HandlePerceptionUpdate(Actor, Stimulus);
+}
+
+void ABaseAIController::HandlePerceptionUpdate(AActor* Actor, FAIStimulus Stimulus)
+{
+    UBlackboardComponent* BlackboardComp = GetBlackboardComponent();
+
+    if (!BlackboardComp)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[BaseAIC] HandlePerceptionUpdate: BlackboardComp es NULL en %s"), *GetNameSafe(GetPawn()));
+        return;
+    }
 
     if (!BlackboardComp || !Actor)
     {
         return;
     }
 
-	AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn());
-	APawn* PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn();
+    AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn());
+    APawn* PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn();
 
     if (Actor != PlayerPawn)
     {
-		return;
+        return;
     }
 
     if (Stimulus.WasSuccessfullySensed())
     {
-		BlackboardComp->SetValueAsBool(TEXT("IsPlayerVisible"), true);
-		BlackboardComp->SetValueAsObject(TEXT("TargetActor"), Actor);
-		BlackboardComp->SetValueAsVector(TEXT("LastKnownLocation"), Actor->GetActorLocation());
-        if(Enemy)
+        UE_LOG(LogTemp, Warning, TEXT("[BaseAIC] %s VE al jugador"), *GetNameSafe(GetPawn()));
+
+        BlackboardComp->SetValueAsBool(TEXT("IsPlayerVisible"), true);
+        BlackboardComp->SetValueAsObject(TEXT("TargetActor"), Actor);
+        BlackboardComp->SetValueAsVector(TEXT("LastKnownLocation"), Actor->GetActorLocation());
+        if (Enemy)
         {
             Enemy->SetMovementState(true);
-		}
+        }
     }
     else
     {
-		BlackboardComp->SetValueAsBool(TEXT("IsPlayerVisible"), false);
-        
+        UE_LOG(LogTemp, Warning, TEXT("[BaseAIC] %s PIERDE al jugador"), *GetNameSafe(GetPawn()));
+
+        BlackboardComp->SetValueAsBool(TEXT("IsPlayerVisible"), false);
+
         if (Enemy && !Enemy->IsA(AAEnemyInfected::StaticClass()))
-        { 
+        {
             BlackboardComp->ClearValue(TEXT("TargetActor"));
             Enemy->SetMovementState(false);
         }

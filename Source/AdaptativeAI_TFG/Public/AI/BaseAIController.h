@@ -30,5 +30,7 @@ protected:
 
 	UFUNCTION()
 	void OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
+
+	virtual void HandlePerceptionUpdate(AActor* Actor, FAIStimulus Stimulus);
 	
 };

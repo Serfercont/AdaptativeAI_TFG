@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Scripts_TFG/EnemyBase.h"
+#include "ShooterWeaponHolder.h"
 #include "EnemyMercenary.generated.h"
 
 /**
@@ -44,7 +45,7 @@ enum class ESquadOrder : uint8
 };
 
 UCLASS()
-class ADAPTATIVEAI_TFG_API AEnemyMercenary : public AEnemyBase
+class ADAPTATIVEAI_TFG_API AEnemyMercenary : public AEnemyBase, public IShooterWeaponHolder
 {
 	GENERATED_BODY()
 
@@ -127,15 +128,45 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "AI | Organization")
 	class ASquadManager* MySquadManager;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI | Weapon")
+	class AShooterWeapon* EquippedWeapon;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	TSubclassOf<class AShooterWeapon> WeaponClass;
+
 	FTimerHandle UtilityTimerHandle;
+
+	FTimerHandle ReloadTimerHandle;
 	//Functions
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	bool RequestAttackSlot();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void ReleaseAttackSlot();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	bool PerformShoot(AActor* Target);
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void InitializeByRole();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
+	void FindCoverPosition(AActor* ThreatActor);
 
 	void UpdateBlackboardValues();
 
 	void EvaluateUtilityScores();
 
+	UFUNCTION(BlueprintCallable, Category = "AI | Organization")
+	void NotifySquadOfDeath();
+
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+
+
 	// Reload the weapon when the amo count is low or after a certain number of shots
-	void ReloadWeapon();
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void StartReloadWeapon();
 
 	// Active when the mercenary is under heavy fire, making it take cover to reduce incoming damage
 	void TakeCover();
@@ -172,5 +203,37 @@ public:
 
 	// Active when the player is using a defensive strategy. coordinating flank and supression function.
 	void AggressiveMode();
+
+	//ISHOOTERWEAPONHOLDER
+
+	virtual void AttachWeaponMeshes(AShooterWeapon* WeaponToAttach) override;
+	virtual FVector GetWeaponTargetLocation() override;
+	virtual void PlayFiringMontage(UAnimMontage* Montage) override {} 
+	virtual void AddWeaponRecoil(float Recoil) override {}             
+	virtual void UpdateWeaponHUD(int32 CurrentAmmo, int32 MagazineSize) override;
+	virtual void AddWeaponClass(const TSubclassOf<AShooterWeapon>& InWeaponClass) override {}
+	virtual void OnWeaponActivated(AShooterWeapon* InWeapon) override {}
+	virtual void OnWeaponDeactivated(AShooterWeapon* InWeapon) override {}
+	virtual void OnSemiWeaponRefire() override;
+
+	UPROPERTY()
+	AActor* CurrentAimTarget;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	float MinAimOffsetZ = -20.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	float MaxAimOffsetZ = 40.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	float AimVarianceHalfAngle = 3.f;  
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	float AimRange = 5000.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	FName ThirdPersonWeaponSocket = FName("weapon_r");
+
+	void StopShooting();
 
 };

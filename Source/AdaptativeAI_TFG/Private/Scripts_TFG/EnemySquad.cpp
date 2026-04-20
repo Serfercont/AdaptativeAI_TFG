@@ -70,8 +70,9 @@ void AEnemySquad::SharePlayerLocation(AActor* TargetPlayer)
 			AAIController* AIController = Cast<AAIController>(Member->GetController());
 			if (AIController && AIController->GetBlackboardComponent())
 			{
-				AIController->GetBlackboardComponent()->SetValueAsVector(FName("LastPlayerLocation"), TargetPlayer->GetActorLocation());
+				AIController->GetBlackboardComponent()->SetValueAsVector(FName("LastKnownLocation"), TargetPlayer->GetActorLocation());
 				AIController->GetBlackboardComponent()->SetValueAsBool(FName("IsPlayerVisible"), true);
+				AIController->GetBlackboardComponent()->SetValueAsObject(FName("TargetActor"), TargetPlayer);
 			}
 		}
 	}
@@ -96,5 +97,23 @@ void AEnemySquad::ReleaseAttackSlot(AEnemyMercenary* ReleasingMember)
 	if(CurrentAttackers.Contains(ReleasingMember))
 	{
 		CurrentAttackers.Remove(ReleasingMember);
+	}
+}
+
+void AEnemySquad::RemoveMemeber(AEnemyMercenary* MemberToRemove)
+{
+	if(!MemberToRemove)
+	{
+		return;
+	}
+
+	SquadMembers.Remove(MemberToRemove);
+
+	ReleaseAttackSlot(MemberToRemove);
+
+	if(SquadMembers.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(SquadBrainTimerHandle);
+		Destroy();
 	}
 }

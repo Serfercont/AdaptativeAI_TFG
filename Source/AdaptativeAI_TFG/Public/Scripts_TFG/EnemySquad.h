@@ -53,5 +53,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Squad | Tactics")
 	void ReleaseAttackSlot(AEnemyMercenary* ReleasingMember);
+
+	UFUNCTION(BlueprintCallable, Category = "Squad")
+	void RemoveMemeber(AEnemyMercenary* MemberToRemove);
 	
 };
