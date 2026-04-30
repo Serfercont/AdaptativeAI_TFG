@@ -3,6 +3,7 @@
 
 #include "AI/MercenaryAIController.h"
 #include "Scripts_TFG/EnemyMercenary.h"
+#include "Scripts_TFG/EnemySquad.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -28,7 +29,7 @@ void AMercenaryAIController::OnUnPossess()
 {
 	if (MercenaryPawn)
 	{
-		MercenaryPawn->ReleaseAttackSlot();
+		//MercenaryPawn->ReleaseAttackSlot();
 		MercenaryPawn->NotifySquadOfDeath();
 	}
 
@@ -53,6 +54,14 @@ void AMercenaryAIController::HandlePerceptionUpdate(AActor* Actor, FAIStimulus S
 
 	if (Stimulus.WasSuccessfullySensed())
 	{
-		MercenaryPawn->CommunicateWithSquad();
+		if(MercenaryPawn->MySquad)
+		{
+			MercenaryPawn->MySquad->AlertAllMembers(Actor);
+		}
+		MercenaryPawn->EnterCombat();
+	}
+	else
+	{
+		MercenaryPawn->ExitCombat();
 	}
 }

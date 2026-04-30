@@ -134,16 +134,28 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
 	TSubclassOf<class AShooterWeapon> WeaponClass;
 
+	UPROPERTY(EditDefaultsOnly,Category = "AI | Weapon")
+	TSubclassOf<class AShooterWeapon> RifleWeaponClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	TSubclassOf<class AShooterWeapon> SniperWeaponClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
+	TSubclassOf<class AShooterWeapon> ShotgunWeaponClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "AI | Combat")
+	bool bIsInCombat;
+
 	FTimerHandle UtilityTimerHandle;
 
 	FTimerHandle ReloadTimerHandle;
 	//Functions
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
-	bool RequestAttackSlot();
+	void EnterCombat();
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
-	void ReleaseAttackSlot();
+	void ExitCombat();
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	bool PerformShoot(AActor* Target);
@@ -163,10 +175,16 @@ public:
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void SetFacingMode(bool bFacePlayer);
+
 
 	// Reload the weapon when the amo count is low or after a certain number of shots
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void StartReloadWeapon();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
+	FVector CalculateSniperPosition(AActor* Target);
 
 	// Active when the mercenary is under heavy fire, making it take cover to reduce incoming damage
 	void TakeCover();
@@ -234,6 +252,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
 	FName ThirdPersonWeaponSocket = FName("weapon_r");
 
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void StopShooting();
 
 };

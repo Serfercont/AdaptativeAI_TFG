@@ -12,6 +12,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AI/MercenaryAIController.h"
 #include <Kismet/KismetMathLibrary.h>
+#include <NavigationSystem.h>
 
 AEnemyMercenary::AEnemyMercenary()
 {
@@ -33,23 +34,34 @@ void AEnemyMercenary::BeginPlay()
 		}
 	}
 
-	if(WeaponClass)
-	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = this;
-		SpawnParams.Instigator = this;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		EquippedWeapon = GetWorld()->SpawnActor<AShooterWeapon>(WeaponClass, GetActorTransform(), SpawnParams);
-		
-	}
 	FTimerHandle InitHandle;
 	GetWorldTimerManager().SetTimer(InitHandle, this, &AEnemyMercenary::InitializeByRole, 0.2f, false);
 
 	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this, &AEnemyMercenary::EvaluateUtilityScores, 0.5f, true);
 }
 
-bool AEnemyMercenary::RequestAttackSlot()
+void AEnemyMercenary:: EnterCombat()
+{
+	bIsInCombat = true;
+	SetFacingMode(true);
+	SetMovementState(true);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] %s: EnterCombat | Role=%d"),
+		*GetName(), (int32)RoleType);
+}
+
+void AEnemyMercenary::ExitCombat()
+{
+	bIsInCombat = false;
+	SetFacingMode(false);
+	StopShooting();
+	SetMovementState(false);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] %s: ExitCombat | Role=%d"),
+		*GetName(), (int32)RoleType);
+}
+
+/*bool AEnemyMercenary::RequestAttackSlot()
 {
 	if(!MySquad)
 	{
@@ -80,18 +92,21 @@ void AEnemyMercenary::ReleaseAttackSlot()
 	{
 		AIController->GetBlackboardComponent()->SetValueAsBool("HasAttackSlot", false);
 	}
-}
+}*/
 
 bool AEnemyMercenary::PerformShoot(AActor* Target)
 {
 	if(!Target)
 	{
+		UE_LOG(LogTemp, Error, TEXT("[Shoot] %s: Target es NULL"), *GetName());
 		return false;
 	}
 
 	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
 	if(DistanceToTarget > EffectiveRange)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: Target fuera de rango. Distancia=%.0f | Rango=%.0f"),
+			*GetName(), DistanceToTarget, EffectiveRange);
 		return false;
 	}
 
@@ -99,11 +114,14 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 	{
 		CurrentAimTarget = Target;
 		EquippedWeapon->StartFiring();
+		UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: DISPARO con arma. Ammo=%.0f | Role=%d"),
+			*GetName(), AmmoCount, (int32)RoleType);
 		return true;
 	}
 
 	if(AmmoCount <= 0.f)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: Sin municion (fallback). Ammo=%.0f"), *GetName(), AmmoCount);
 		return false;
 	}
 
@@ -111,6 +129,7 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 	
 	AmmoCount--;
 	UpdateBlackboardValues();
+	UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: DISPARO directo (fallback). Ammo restante=%.0f"), *GetName(), AmmoCount);
 	return true;
 }
 
@@ -133,7 +152,7 @@ void AEnemyMercenary::InitializeByRole()
 		RunMultiplier = 1.3f;
 		TurnRate = 90.f;
 		EffectiveRange = 5000.f;
-		Damage = 80.f;
+		Damage = 0.80f;
 		Precision = 0.8f;
 		ReloadTime = 3.5f;
 		AmmoCount = 5.f;
@@ -143,7 +162,7 @@ void AEnemyMercenary::InitializeByRole()
 		RunMultiplier = 1.7f;
 		TurnRate = 120.f;
 		EffectiveRange = 2000.f;
-		Damage = 25.f;
+		Damage = 0.25f;
 		Precision = 0.6f;
 		ReloadTime = 2.f;
 		AmmoCount = 30.f;
@@ -153,7 +172,7 @@ void AEnemyMercenary::InitializeByRole()
 		RunMultiplier = 1.5f;
 		TurnRate = 160.f;
 		EffectiveRange = 600.f;
-		Damage = 50.f;
+		Damage = 0.50f;
 		Precision = 0.4f;
 		ReloadTime = 2.5f;
 		AmmoCount = 8.f;
@@ -163,14 +182,60 @@ void AEnemyMercenary::InitializeByRole()
 		RunMultiplier = 1.7f;
 		TurnRate = 120.f;
 		EffectiveRange = 2000.f;
-		Damage = 25.f;
+		Damage = 0.25f;
 		Precision = 0.6f;
 		ReloadTime = 2.f;
 		AmmoCount = 30.f;
 		break;
 	}
+	float ApproachRadius = EffectiveRange * 0.8f;
 
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
+	TSubclassOf<AShooterWeapon> SelectedWeaponClass = nullptr;
+	switch (RoleType)
+	{
+		case EEnemyRole::Sniper:   SelectedWeaponClass = SniperWeaponClass;  break;
+		case EEnemyRole::Rifle:    SelectedWeaponClass = RifleWeaponClass;   break;
+		case EEnemyRole::Shotgun:  SelectedWeaponClass = ShotgunWeaponClass; break;
+		default:                   SelectedWeaponClass = RifleWeaponClass;   break;
+	}
+
+	if (EquippedWeapon)
+	{
+		EquippedWeapon->Destroy();
+		EquippedWeapon = nullptr;
+	}
+
+	if(SelectedWeaponClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		EquippedWeapon = GetWorld()->SpawnActor<AShooterWeapon>(SelectedWeaponClass, GetActorTransform(), SpawnParams);
+		if (EquippedWeapon)
+		{
+			AttachWeaponMeshes(EquippedWeapon);
+			UpdateBlackboardValues();
+			UE_LOG(LogTemp, Warning, TEXT("%s: Arma equipada segun rol %d"), *GetName(), (int32)RoleType);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("%s: Error al equipar arma para rol %d"), *GetName(), (int32)RoleType);
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: No se asigno clase de arma para rol %d"), *GetName(), (int32)RoleType);
+	}
+
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if (AIController && AIController->GetBlackboardComponent())
+	{
+		AIController->GetBlackboardComponent()->SetValueAsInt("RoleID", (int32)RoleType);
+	}
+
 	UpdateBlackboardValues();
 }
 
@@ -191,6 +256,16 @@ void AEnemyMercenary::UpdateBlackboardValues()
 	float HealthPct = CurrentHealth / MaxHealth;
 	Blackboard->SetValueAsFloat("SelfHealthPct", HealthPct);
 	Blackboard->SetValueAsFloat("AmmoCount", AmmoCount);
+
+	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
+	if(TargetPlayer)
+	{
+		float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
+		Blackboard->SetValueAsFloat("DistanceToPlayer", DistanceToPlayer);
+		Blackboard->SetValueAsBool("IsInRange", DistanceToPlayer <= EffectiveRange);
+	}
+
+	Blackboard->SetValueAsFloat("ApproachRadius", EffectiveRange * 0.8f);
 }
 
 void AEnemyMercenary::EvaluateUtilityScores()
@@ -226,6 +301,12 @@ float AEnemyMercenary::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 	return ActualDamage;
 }
 
+void AEnemyMercenary::SetFacingMode(bool bFacePlayer)
+{
+	bUseControllerRotationYaw = bFacePlayer;
+	GetCharacterMovement()->bOrientRotationToMovement = !bFacePlayer;
+}
+
 void AEnemyMercenary::StartReloadWeapon()
 {
 	AAIController* AIController = Cast<AAIController>(GetController());
@@ -237,12 +318,17 @@ void AEnemyMercenary::StartReloadWeapon()
 	UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
 	if(Blackboard->GetValueAsBool("IsReloading"))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Reload] %s: Ya esta recargando, ignorado"), *GetName());
+
 		return;
 	}
 
 	Blackboard->SetValueAsBool("IsReloading", true);
 
 	float Duration = ReloadTime > 0.f ? ReloadTime : 2.0f;
+
+	UE_LOG(LogTemp, Warning, TEXT("[Reload] %s: INICIO recarga. Duracion=%.1fs | Role=%d"),
+		*GetName(), Duration, (int32)RoleType);
 
 	GetWorldTimerManager().SetTimer(
 		ReloadTimerHandle,
@@ -262,10 +348,35 @@ void AEnemyMercenary::StartReloadWeapon()
 			{
 				AIC->GetBlackboardComponent()->SetValueAsBool(FName("IsReloading"), false);
 			}
+		UE_LOG(LogTemp, Warning, TEXT("[Reload] %s: FIN recarga. Ammo=%.0f"),
+			*GetName(), AmmoCount);
 		},
 		Duration,
 		false
 	);
+}
+
+FVector AEnemyMercenary::CalculateSniperPosition(AActor* Target)
+{
+	if(!Target)
+	{
+		return GetActorLocation();
+	}
+
+	FVector MyLocation = GetActorLocation();
+	FVector ToTarget = (Target->GetActorLocation() - MyLocation).GetSafeNormal();
+
+	FVector IdealPosition = MyLocation - (ToTarget * 3000.f);
+	IdealPosition.Z += 200.f;
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	FNavLocation NavResult;
+
+	if(NavSys && NavSys->ProjectPointToNavigation(IdealPosition, NavResult, FVector(500.f, 500.f, 500.f)))
+	{
+		return NavResult.Location;
+	}
+	return MyLocation;
 }
 
 
@@ -361,6 +472,7 @@ void AEnemyMercenary::UpdateWeaponHUD(int32 CurrentAmmo, int32 MagazineSize)
 {
 	AmmoCount = static_cast<float>(CurrentAmmo);
 	UpdateBlackboardValues();
+	UE_LOG(LogTemp, Warning, TEXT("[Ammo] %s: Ammo=%d / %d"), *GetName(), CurrentAmmo, MagazineSize);
 }
 
 void AEnemyMercenary::OnSemiWeaponRefire()

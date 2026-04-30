@@ -42,19 +42,10 @@ public:
 
 	void SharePlayerLocation(AActor* TargetPlayer);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Squad | Tactics");
-	int32 MaxAttackSlots = 2;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Squad | Tactics");
-	TArray<AEnemyMercenary*> CurrentAttackers;
-
-	UFUNCTION(BlueprintCallable, Category = "Squad | Tactics")
-	bool RequestAttackSlot(AEnemyMercenary* RequestingMember);
-
-	UFUNCTION(BlueprintCallable, Category = "Squad | Tactics")
-	void ReleaseAttackSlot(AEnemyMercenary* ReleasingMember);
-
 	UFUNCTION(BlueprintCallable, Category = "Squad")
 	void RemoveMemeber(AEnemyMercenary* MemberToRemove);
+
+	UFUNCTION(BlueprintCallable, Category = "Squad")
+	void AlertAllMembers(AActor* TargetPlayer);
 	
 };

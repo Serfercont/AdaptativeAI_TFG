@@ -78,7 +78,7 @@ void AEnemySquad::SharePlayerLocation(AActor* TargetPlayer)
 	}
 }
 
-bool AEnemySquad::RequestAttackSlot(AEnemyMercenary* RequestingMember)
+/*bool AEnemySquad::RequestAttackSlot(AEnemyMercenary* RequestingMember)
 {
 	if(CurrentAttackers.Contains(RequestingMember))
 	{
@@ -98,7 +98,7 @@ void AEnemySquad::ReleaseAttackSlot(AEnemyMercenary* ReleasingMember)
 	{
 		CurrentAttackers.Remove(ReleasingMember);
 	}
-}
+}*/
 
 void AEnemySquad::RemoveMemeber(AEnemyMercenary* MemberToRemove)
 {
@@ -109,11 +109,35 @@ void AEnemySquad::RemoveMemeber(AEnemyMercenary* MemberToRemove)
 
 	SquadMembers.Remove(MemberToRemove);
 
-	ReleaseAttackSlot(MemberToRemove);
+	//ReleaseAttackSlot(MemberToRemove);
 
 	if(SquadMembers.Num() == 0)
 	{
 		GetWorldTimerManager().ClearTimer(SquadBrainTimerHandle);
 		Destroy();
+	}
+}
+
+void AEnemySquad::AlertAllMembers(AActor* TargetPlayer)
+{
+	for (AEnemyMercenary* Member : SquadMembers)
+	{
+		if (Member)
+		{
+			AAIController* AIController = Cast<AAIController>(Member->GetController());
+			if (AIController && AIController->GetBlackboardComponent())
+			{
+				AIController->GetBlackboardComponent()->SetValueAsObject(FName("TargetActor"), TargetPlayer);
+				AIController->GetBlackboardComponent()->SetValueAsBool(FName("IsPlayerVisible"), true);
+				AIController->GetBlackboardComponent()->SetValueAsVector(FName("LastKnownLocation"), TargetPlayer->GetActorLocation());
+			}
+			Member->EnterCombat();
+		}
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red,
+			FString::Printf(TEXT("Escuadron: ALERTA TOTAL! %d mercenarios atacan"), SquadMembers.Num()));
 	}
 }
