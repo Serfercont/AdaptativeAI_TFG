@@ -183,10 +183,10 @@ void AShooterWeapon::FireProjectile(const FVector& TargetLocation)
 	--CurrentBullets;
 
 	// if the clip is depleted, reload it
-	if (CurrentBullets <= 0)
+	/*if (CurrentBullets <= 0)
 	{
 		CurrentBullets = MagazineSize;
-	}
+	}*/
 
 	// update the weapon HUD
 	WeaponOwner->UpdateWeaponHUD(CurrentBullets, MagazineSize);

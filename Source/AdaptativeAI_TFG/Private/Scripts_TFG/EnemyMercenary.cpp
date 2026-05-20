@@ -171,7 +171,7 @@ void AEnemyMercenary::InitializeByRole()
 		WalkSpeed = 350.f;
 		RunMultiplier = 1.5f;
 		TurnRate = 160.f;
-		EffectiveRange = 600.f;
+		EffectiveRange = 800.f;
 		Damage = 0.50f;
 		Precision = 0.4f;
 		ReloadTime = 2.5f;
@@ -453,7 +453,7 @@ FVector AEnemyMercenary::GetWeaponTargetLocation()
 	}
 
 	FVector AimSource = GetMesh()->GetSocketLocation(FName("head"));
-	FVector AimTarget = CurrentAimTarget->GetActorLocation();
+	FVector AimTarget = CurrentAimTarget->GetActorLocation()+ FVector(0.f,0.f,0.f);
 	AimTarget.Z += FMath::RandRange(MinAimOffsetZ, MaxAimOffsetZ);
 
 	FVector AimDirection = (AimTarget - AimSource).GetSafeNormal();
