@@ -22,8 +22,20 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	FVector LastRecordedPlayerPosition = FVector::ZeroVector;
+
+	float PlayerStationaryStartTime = -1.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Squad")
+	float CampingDetectionTime = 5.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Squad")
+	float CampingMovementThreshold = 300.0f;
 
 public: 
+
+	bool bFlankActivated = false;
+	float TimePlayerLastSeen = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Squad")
 	TArray<AEnemyMercenary*> SquadMembers;
@@ -47,5 +59,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Squad")
 	void AlertAllMembers(AActor* TargetPlayer);
+
+	UFUNCTION(BlueprintCallable, Category = "Squad")
+	void CoordinateFlankAndSupress();
+
+	UFUNCTION(BlueprintCallable, Category = "Squad")
+	void CancelFlanking();
+
+	UFUNCTION(BlueprintCallable, Category = "Squad")
+	void UpdateSuppressionTargets(FVector TargetLoc);
 	
 };

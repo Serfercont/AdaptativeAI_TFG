@@ -26,7 +26,7 @@ void AEnemySquad::InitializeSquad(const TArray<AEnemyMercenary*>& Members)
 		Member->MySquad = this;
 	}
 
-	GetWorldTimerManager().SetTimer(SquadBrainTimerHandle, this, &AEnemySquad::EvaluateSquadStrategy, 2.0f, true);
+	GetWorldTimerManager().SetTimer(SquadBrainTimerHandle, this, &AEnemySquad::EvaluateSquadStrategy, 0.5f, true);
 }
 
 
@@ -34,20 +34,85 @@ void AEnemySquad::EvaluateSquadStrategy()
 {
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, TEXT("Cerebro de Escuadron evaluando tacticas..."));
+		GEngine->AddOnScreenDebugMessage(1, 0.5f, FColor::Cyan, TEXT("Cerebro de Escuadron evaluando tacticas..."));
 	}
 
-	if(CurrentPlayerStrategy == EPlayerStrategy::Defensive)
+	FVector CurrentPlayerPosition = FVector::ZeroVector;
+	bool bAnyMemberHasTarget = false;
+	AActor* TargetPlayer = nullptr;
+
+	for (AEnemyMercenary* Member : SquadMembers)
 	{
-		//Strategy To counter Defensive Player Strategy	
+		if (!Member) continue;
+		AAIController* AIC = Cast<AAIController>(Member->GetController());
+		if (!AIC || !AIC->GetBlackboardComponent()) continue;
+
+		UBlackboardComponent* BB = AIC->GetBlackboardComponent();
+		TargetPlayer = Cast<AActor>(BB->GetValueAsObject(FName("TargetActor")));
+
+		if (TargetPlayer)
+		{
+			bAnyMemberHasTarget = true;
+			CurrentPlayerPosition = TargetPlayer->GetActorLocation();
+			break;
+		}
+
+		FVector LastKnown = BB->GetValueAsVector(FName("LastKnownLocation"));
+		if (!LastKnown.IsZero())
+		{
+			bAnyMemberHasTarget = true;
+			CurrentPlayerPosition = LastKnown;
+		}
 	}
-	else if(CurrentPlayerStrategy == EPlayerStrategy::Agressive)
+
+	if (!bAnyMemberHasTarget)
 	{
-		//Strategy To counter Agressive Player Strategy
+		PlayerStationaryStartTime = -1.f;
+		LastRecordedPlayerPosition = FVector::ZeroVector;
+		if (bFlankActivated) CancelFlanking();
+		return;
 	}
-	else if (CurrentPlayerStrategy == EPlayerStrategy::Silent)
+
+	if (PlayerStationaryStartTime < 0.f)
 	{
-		//Strategy To counter Silent Player Strategy
+		PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
+		LastRecordedPlayerPosition = CurrentPlayerPosition;
+		return;
+	}
+
+	float DistanceMoved = FVector::Dist(CurrentPlayerPosition, LastRecordedPlayerPosition);
+
+	if (DistanceMoved > CampingMovementThreshold)
+	{
+		LastRecordedPlayerPosition = CurrentPlayerPosition;
+		PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
+
+		if (bFlankActivated)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Squad] Jugador se movio. Cancelando flanqueo."));
+			CancelFlanking();
+		}
+		return;
+	}
+	
+
+	float TimeStationary = GetWorld()->GetTimeSeconds() - PlayerStationaryStartTime;
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,
+			FString::Printf(TEXT("[Squad] Jugador quieto %.1fs / %.1fs para flanqueo"),
+				TimeStationary, CampingDetectionTime));
+	}
+
+	if (!bFlankActivated && TimeStationary >= CampingDetectionTime)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Squad] JUGADOR CAMPEANDO %.1fs. INICIANDO FLANQUEO."),TimeStationary);
+		CoordinateFlankAndSupress();
+	}
+	else if (bFlankActivated && TargetPlayer)
+	{
+		UpdateSuppressionTargets(CurrentPlayerPosition);
 	}
 	
 }
@@ -139,5 +204,93 @@ void AEnemySquad::AlertAllMembers(AActor* TargetPlayer)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red,
 			FString::Printf(TEXT("Escuadron: ALERTA TOTAL! %d mercenarios atacan"), SquadMembers.Num()));
+	}
+}
+
+void AEnemySquad::CoordinateFlankAndSupress()
+{
+	bFlankActivated = true;
+
+	TArray<AEnemyMercenary*> ActiveMembers;
+	for (AEnemyMercenary* Member : SquadMembers)
+	{
+		if (Member && Member->CurrentHealth > 0)
+		{
+			ActiveMembers.Add(Member);
+		}
+	}
+
+	int32 TotalActive = ActiveMembers.Num();
+	if (TotalActive == 0)
+	{
+		return;
+	}
+
+	int32 NumFlankers = FMath::Max(1, FMath::FloorToInt(TotalActive * 0.35f));
+	int32 NumSuppressors = TotalActive - NumFlankers;
+
+	ActiveMembers.Sort([](const AEnemyMercenary& A, const AEnemyMercenary& B)
+	{
+		return (int32)A.RoleType < (int32)B.RoleType;
+	});
+
+	FVector AimTarget = LastRecordedPlayerPosition + FVector(0, 0, 50);
+
+	for (int32 i = 0; i < ActiveMembers.Num(); i++)
+	{
+		if (i < NumFlankers)
+		{
+			ActiveMembers[i]->AssignFlankerRole();
+		}
+		else
+		{
+			ActiveMembers[i]->AssignSupressorRole();
+			ActiveMembers[i]->PerformSuppressionFire(LastRecordedPlayerPosition);
+
+			AAIController* AIController = Cast<AAIController>(ActiveMembers[i]->GetController());
+			if (AIController && AIController->GetBlackboardComponent())
+			{
+				AIController->GetBlackboardComponent()->SetValueAsVector(FName("SuppressionTarget"), AimTarget);
+			}
+		}
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange,
+			FString::Printf(TEXT("FLANQUEO: %d supresores, %d flanqueadores"), NumSuppressors, NumFlankers));
+	}
+}
+
+void AEnemySquad::CancelFlanking()
+{
+	bFlankActivated = false;
+	for (AEnemyMercenary* Member : SquadMembers)
+	{
+		if (Member)
+		{
+			Member->ClearCombatRole();
+		}
+	}
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green,
+			TEXT("FLANQUEO CANCELADO: Todos los miembros vuelven a ser supresores"));
+	}
+}
+
+void AEnemySquad::UpdateSuppressionTargets(FVector TargetLoc)
+{
+	for(AEnemyMercenary* Member : SquadMembers)
+	{
+		if (Member && Member->bIsSupressing)
+		{
+			Member->SuppressionTargetLocation = TargetLoc;
+			AAIController* AIController = Cast<AAIController>(Member->GetController());
+			if(AIController && AIController->GetBlackboardComponent())
+			{
+				AIController->GetBlackboardComponent()->SetValueAsVector(FName("SuppressionTarget"), TargetLoc);
+			}
+		}
 	}
 }

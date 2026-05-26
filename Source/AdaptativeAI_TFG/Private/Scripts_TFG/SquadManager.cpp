@@ -16,7 +16,7 @@ void ASquadManager::BeginPlay()
 {
 	Super::BeginPlay();
 
-	GetWorldTimerManager().SetTimerForNextTick(this, &ASquadManager::OrganizeSquads);
+	GetWorldTimerManager().SetTimer(OrganizeTimerHandle, this, &ASquadManager::OrganizeSquads, 1.0f, false);
 }
 
 void ASquadManager::OrganizeSquads()

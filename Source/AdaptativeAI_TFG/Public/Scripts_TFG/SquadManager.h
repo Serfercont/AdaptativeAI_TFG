@@ -25,6 +25,7 @@ protected:
 public:	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Squad | Organization")
 	TArray<AEnemyMercenary*> UnassignedMercenaries;
+	FTimerHandle OrganizeTimerHandle;
 
 	void RegisterSquadMember(AEnemyMercenary* NewMember);
 };

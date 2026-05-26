@@ -146,6 +146,12 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "AI | Combat")
 	bool bIsInCombat;
 
+	UPROPERTY(BlueprintReadOnly, Category = "AI | Combat")
+	bool bIsSupressing = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "AI | Combat")
+	FVector SuppressionTargetLocation = FVector::ZeroVector;
+
 	FTimerHandle UtilityTimerHandle;
 
 	FTimerHandle ReloadTimerHandle;
@@ -185,6 +191,24 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
 	FVector CalculateSniperPosition(AActor* Target);
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void PerformSuppressionFire(FVector TargetLocation);
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void StopSuppressionFire();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void AssignSupressorRole();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void AssignFlankerRole();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void ClearCombatRole();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
+	FVector CalculateFlankPosition(AActor* ThreatActor);
 
 	// Active when the mercenary is under heavy fire, making it take cover to reduce incoming damage
 	void TakeCover();

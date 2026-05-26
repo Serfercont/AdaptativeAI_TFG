@@ -56,6 +56,7 @@ void AEnemyMercenary::ExitCombat()
 	SetFacingMode(false);
 	StopShooting();
 	SetMovementState(false);
+	ClearCombatRole();
 
 	UE_LOG(LogTemp, Warning, TEXT("[Combat] %s: ExitCombat | Role=%d"),
 		*GetName(), (int32)RoleType);
@@ -263,6 +264,18 @@ void AEnemyMercenary::UpdateBlackboardValues()
 		float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
 		Blackboard->SetValueAsFloat("DistanceToPlayer", DistanceToPlayer);
 		Blackboard->SetValueAsBool("IsInRange", DistanceToPlayer <= EffectiveRange);
+
+		FHitResult Hit;
+		FVector StartLoc = GetActorLocation() + FVector(0.f, 0.f, 60.f);
+		FVector EndLoc = TargetPlayer->GetActorLocation() + FVector(0.f, 0.f, 60.f);
+
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+		QueryParams.AddIgnoredActor(TargetPlayer);
+
+		bool bHitCover = GetWorld()->LineTraceSingleByChannel(Hit, StartLoc, EndLoc, ECC_Visibility, QueryParams);
+
+		Blackboard->SetValueAsBool("HasClearLineOfSight", !bHitCover);
 	}
 
 	Blackboard->SetValueAsFloat("ApproachRadius", EffectiveRange * 0.8f);
@@ -379,6 +392,96 @@ FVector AEnemyMercenary::CalculateSniperPosition(AActor* Target)
 	return MyLocation;
 }
 
+void AEnemyMercenary::PerformSuppressionFire(FVector TargetLocation)
+{
+	if(!EquippedWeapon)
+	{
+		return;
+	}
+
+	bIsSupressing = true;
+
+	SuppressionTargetLocation = TargetLocation + FVector(
+		FMath::RandRange(-250.f, 250.f),
+		FMath::RandRange(-250.f, 250.f),
+		FMath::RandRange(0.f, 80.f)
+	);
+
+	CurrentAimTarget = nullptr;
+	EquippedWeapon->StartFiring();
+}
+
+void AEnemyMercenary::StopSuppressionFire()
+{
+	bIsSupressing = false;
+	SuppressionTargetLocation = FVector::ZeroVector;
+	CurrentAimTarget = nullptr;
+	EquippedWeapon->StopFiring();
+}
+
+void AEnemyMercenary::AssignSupressorRole()
+{
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if(!AIController || !AIController->GetBlackboardComponent())
+	{
+		return;
+	}
+
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsSupressor", true);
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", false);
+}
+
+void AEnemyMercenary::AssignFlankerRole()
+{
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if (!AIController || !AIController->GetBlackboardComponent())
+	{
+		return;
+	}
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsSupressor", false);
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", true);
+}
+
+void AEnemyMercenary::ClearCombatRole()
+{
+	bIsSupressing = false;
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if (!AIController || !AIController->GetBlackboardComponent())
+	{
+		return;
+	}
+
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsSupressor", false);
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", false);
+}
+
+FVector AEnemyMercenary::CalculateFlankPosition(AActor* ThreatActor)
+{
+	if (!ThreatActor)
+	{
+		return GetActorLocation();
+	}
+
+	FVector PlayerLocation = ThreatActor->GetActorLocation();
+	FVector PlayerForward = ThreatActor->GetActorForwardVector();
+	FVector PlayerRight = ThreatActor->GetActorRightVector();
+
+	float Side = FMath::RandBool() ? 1.f : -1.f;
+
+	FVector FlankDirection = (-PlayerForward + PlayerRight *Side).GetSafeNormal();
+	FVector IdealFlankPosition = PlayerLocation + FlankDirection * FMath::RandRange(600.f, 1200.f);
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	FNavLocation NavResult;
+
+	if(NavSys && NavSys->ProjectPointToNavigation(IdealFlankPosition, NavResult, FVector(500.f, 500.f, 300.f)))
+	{
+		return NavResult.Location;
+	}
+
+	return PlayerLocation + FlankDirection * 800.f;
+}
+
 
 void AEnemyMercenary::TakeCover()
 {
@@ -447,6 +550,15 @@ void AEnemyMercenary::AttachWeaponMeshes(AShooterWeapon* WeaponToAttach)
 
 FVector AEnemyMercenary::GetWeaponTargetLocation()
 {
+	if(bIsSupressing)
+	{
+		return SuppressionTargetLocation + FVector(
+			FMath::RandRange(-100.f, 100.f),
+			FMath::RandRange(-100.f, 100.f),
+			FMath::RandRange(0.f, 50.f)
+		);
+	}
+
 	if(!CurrentAimTarget)
 	{
 		return GetActorLocation() + GetActorForwardVector() * 1000.f;

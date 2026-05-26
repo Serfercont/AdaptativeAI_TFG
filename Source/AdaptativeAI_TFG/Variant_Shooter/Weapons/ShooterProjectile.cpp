@@ -123,19 +123,18 @@ void AShooterProjectile::ExplosionCheck(const FVector& ExplosionCenter)
 	// process the overlap results
 	for (const FOverlapResult& CurrentOverlap : Overlaps)
 	{
-		// overlaps may return the same actor multiple times per each component overlapped
-		// ensure we only damage each actor once by adding it to a damaged list
-		if (DamagedActors.Find(CurrentOverlap.GetActor()) == INDEX_NONE)
+		AActor* OverlappedActor = CurrentOverlap.GetActor();
+
+		if (OverlappedActor && DamagedActors.Find(OverlappedActor) == INDEX_NONE)
 		{
-			DamagedActors.Add(CurrentOverlap.GetActor());
+			DamagedActors.Add(OverlappedActor);
 
 			// apply physics force away from the explosion
-			const FVector& ExplosionDir = CurrentOverlap.GetActor()->GetActorLocation() - GetActorLocation();
+			const FVector& ExplosionDir = OverlappedActor->GetActorLocation() - GetActorLocation();
 
 			// push and/or damage the overlapped actor
-			ProcessHit(CurrentOverlap.GetActor(), CurrentOverlap.GetComponent(), GetActorLocation(), ExplosionDir.GetSafeNormal());
+			ProcessHit(OverlappedActor, CurrentOverlap.GetComponent(), GetActorLocation(), ExplosionDir.GetSafeNormal());
 		}
-			
 	}
 }
 
@@ -147,13 +146,15 @@ void AShooterProjectile::ProcessHit(AActor* HitActor, UPrimitiveComponent* HitCo
 		// ignore the owner of this projectile
 		if (HitCharacter != GetOwner() || bDamageOwner)
 		{
+			AController* InstigatorController = GetInstigator() ? GetInstigator()->GetController() : nullptr;
+
 			// apply damage to the character
-			UGameplayStatics::ApplyDamage(HitCharacter, HitDamage, GetInstigator()->GetController(), this, HitDamageType);
+			UGameplayStatics::ApplyDamage(HitCharacter, HitDamage, InstigatorController, this, HitDamageType);
 		}
 	}
 
 	// have we hit a physics object?
-	if (HitComp->IsSimulatingPhysics())
+	if (HitComp && HitComp->IsSimulatingPhysics())
 	{
 		// give some physics impulse to the object
 		HitComp->AddImpulseAtLocation(HitDirection * PhysicsForce, HitLocation);
