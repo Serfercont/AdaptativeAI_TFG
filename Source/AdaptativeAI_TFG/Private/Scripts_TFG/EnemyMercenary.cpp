@@ -17,6 +17,12 @@
 AEnemyMercenary::AEnemyMercenary()
 {
 	AIControllerClass = AMercenaryAIController::StaticClass();
+	PrimaryActorTick.bCanEverTick = true;
+
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	GetCharacterMovement()->bUseControllerDesiredRotation = true;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 120.f, 0.f);
+	bUseControllerRotationYaw = false;
 }
 
 void AEnemyMercenary::BeginPlay()
@@ -34,20 +40,47 @@ void AEnemyMercenary::BeginPlay()
 		}
 	}
 
-	FTimerHandle InitHandle;
-	GetWorldTimerManager().SetTimer(InitHandle, this, &AEnemyMercenary::InitializeByRole, 0.2f, false);
+	EffectiveRange = 2000.f;
+	AmmoCount = 30.f;
+
+	GetWorldTimerManager().SetTimer(InitHandle, this, &AEnemyMercenary::InitializeByRole, 1.2f, false);
 
 	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this, &AEnemyMercenary::EvaluateUtilityScores, 0.5f, true);
+}
+
+void AEnemyMercenary::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if(!bIsInCombat)
+	{
+		return;
+	}
+
+	BlackboardUpdateAccumulator += DeltaTime;
+	if(BlackboardUpdateAccumulator >= BlackboardUpdateInterval)
+	{
+		UpdateBlackboardValues();
+		BlackboardUpdateAccumulator = 0.f;
+	}
 }
 
 void AEnemyMercenary:: EnterCombat()
 {
 	bIsInCombat = true;
 	SetFacingMode(true);
-	SetMovementState(true);
 
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] %s: EnterCombat | Role=%d"),
-		*GetName(), (int32)RoleType);
+	AAIController* AIController = Cast<AAIController>(GetController());
+	bool bIsSuppressor = false;
+	if(AIController && AIController->GetBlackboardComponent())
+	{
+		bIsSuppressor = AIController->GetBlackboardComponent()->GetValueAsBool("IsSuppressor");
+	}
+
+	if (!bIsSuppressor)
+	{
+		SetMovementState(true);
+	}
 }
 
 void AEnemyMercenary::ExitCombat()
@@ -56,10 +89,11 @@ void AEnemyMercenary::ExitCombat()
 	SetFacingMode(false);
 	StopShooting();
 	SetMovementState(false);
-	ClearCombatRole();
-
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] %s: ExitCombat | Role=%d"),
-		*GetName(), (int32)RoleType);
+	
+	if (!MySquad || !MySquad->bFlankActivated)
+	{
+		ClearCombatRole();
+	}
 }
 
 /*bool AEnemyMercenary::RequestAttackSlot()
@@ -99,15 +133,12 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 {
 	if(!Target)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[Shoot] %s: Target es NULL"), *GetName());
 		return false;
 	}
 
 	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
 	if(DistanceToTarget > EffectiveRange)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: Target fuera de rango. Distancia=%.0f | Rango=%.0f"),
-			*GetName(), DistanceToTarget, EffectiveRange);
 		return false;
 	}
 
@@ -115,14 +146,11 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 	{
 		CurrentAimTarget = Target;
 		EquippedWeapon->StartFiring();
-		UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: DISPARO con arma. Ammo=%.0f | Role=%d"),
-			*GetName(), AmmoCount, (int32)RoleType);
 		return true;
 	}
 
 	if(AmmoCount <= 0.f)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: Sin municion (fallback). Ammo=%.0f"), *GetName(), AmmoCount);
 		return false;
 	}
 
@@ -130,7 +158,6 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 	
 	AmmoCount--;
 	UpdateBlackboardValues();
-	UE_LOG(LogTemp, Warning, TEXT("[Shoot] %s: DISPARO directo (fallback). Ammo restante=%.0f"), *GetName(), AmmoCount);
 	return true;
 }
 
@@ -189,9 +216,31 @@ void AEnemyMercenary::InitializeByRole()
 		AmmoCount = 30.f;
 		break;
 	}
-	float ApproachRadius = EffectiveRange * 0.8f;
 
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
+	switch (RoleType)
+	{
+		case EEnemyRole::Sniper:
+			GetCharacterMovement()->RotationRate = FRotator(0.f, TurnRate, 0.f);
+			break;
+		case EEnemyRole::Rifle:
+			GetCharacterMovement()->RotationRate = FRotator(0.f, TurnRate, 0.f);
+			break;
+		case EEnemyRole::Shotgun:
+			GetCharacterMovement()->RotationRate = FRotator(0.f, TurnRate, 0.f);
+			break;
+		default:
+			GetCharacterMovement()->RotationRate = FRotator(0.f, 120.f, 0.f);
+			break;
+	}
+
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if(AIController && AIController->GetBlackboardComponent())
+	{
+		AIController->GetBlackboardComponent()->SetValueAsInt("RoleID", (int32)RoleType);
+		AIController->GetBlackboardComponent()->SetValueAsFloat("ApproachRadius", EffectiveRange * 0.8f);
+	}
 
 	TSubclassOf<AShooterWeapon> SelectedWeaponClass = nullptr;
 	switch (RoleType)
@@ -219,24 +268,8 @@ void AEnemyMercenary::InitializeByRole()
 		{
 			AttachWeaponMeshes(EquippedWeapon);
 			UpdateBlackboardValues();
-			UE_LOG(LogTemp, Warning, TEXT("%s: Arma equipada segun rol %d"), *GetName(), (int32)RoleType);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("%s: Error al equipar arma para rol %d"), *GetName(), (int32)RoleType);
 		}
 	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: No se asigno clase de arma para rol %d"), *GetName(), (int32)RoleType);
-	}
-
-	AAIController* AIController = Cast<AAIController>(GetController());
-	if (AIController && AIController->GetBlackboardComponent())
-	{
-		AIController->GetBlackboardComponent()->SetValueAsInt("RoleID", (int32)RoleType);
-	}
-
 	UpdateBlackboardValues();
 }
 
@@ -258,12 +291,27 @@ void AEnemyMercenary::UpdateBlackboardValues()
 	Blackboard->SetValueAsFloat("SelfHealthPct", HealthPct);
 	Blackboard->SetValueAsFloat("AmmoCount", AmmoCount);
 
+
 	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
+
+	Blackboard->SetValueAsBool("IsInRange", false);
+	Blackboard->SetValueAsBool("HasClearLineOfSight", false);
 	if(TargetPlayer)
 	{
 		float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
 		Blackboard->SetValueAsFloat("DistanceToPlayer", DistanceToPlayer);
-		Blackboard->SetValueAsBool("IsInRange", DistanceToPlayer <= EffectiveRange);
+
+		bool bCurrentlyInRange = Blackboard->GetValueAsBool("IsInRange");
+		bool bNewInRange;
+		if (bCurrentlyInRange)
+		{
+			bNewInRange = DistanceToPlayer <= (EffectiveRange * 1.1f);
+		}
+		else
+		{
+			bNewInRange = DistanceToPlayer <= EffectiveRange;
+		}
+		Blackboard->SetValueAsBool("IsInRange", bNewInRange);
 
 		FHitResult Hit;
 		FVector StartLoc = GetActorLocation() + FVector(0.f, 0.f, 60.f);
@@ -278,7 +326,24 @@ void AEnemyMercenary::UpdateBlackboardValues()
 		Blackboard->SetValueAsBool("HasClearLineOfSight", !bHitCover);
 	}
 
+	if (bIsInCombat)
+	{
+		AMercenaryAIController* MercAIController = Cast<AMercenaryAIController>(AIController);
+		if (MercAIController && TargetPlayer)
+		{
+			if(MercAIController->GetFocusActor() != TargetPlayer)
+			{
+				MercAIController->SetFocus(TargetPlayer, EAIFocusPriority::Gameplay);
+			}
+		}
+		else if (MercAIController && !TargetPlayer)
+		{
+			MercAIController->ClearFocus(EAIFocusPriority::Gameplay);
+		}
+	}
+
 	Blackboard->SetValueAsFloat("ApproachRadius", EffectiveRange * 0.8f);
+
 }
 
 void AEnemyMercenary::EvaluateUtilityScores()
@@ -316,8 +381,25 @@ float AEnemyMercenary::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 
 void AEnemyMercenary::SetFacingMode(bool bFacePlayer)
 {
-	bUseControllerRotationYaw = bFacePlayer;
-	GetCharacterMovement()->bOrientRotationToMovement = !bFacePlayer;
+	AMercenaryAIController* AIController = Cast<AMercenaryAIController>(GetController());
+	if(!AIController)
+	{
+		return;
+	}
+
+	if(bFacePlayer)
+	{
+		AActor* TargetPlayer = Cast<AActor>(AIController->GetBlackboardComponent()? AIController->GetBlackboardComponent()->GetValueAsObject(FName("TargetActor")): nullptr);
+
+		if(TargetPlayer)
+		{
+			AIController->SetFocus(TargetPlayer, EAIFocusPriority::Gameplay);
+		}
+	}
+	else
+	{
+		AIController->ClearFocus(EAIFocusPriority::Gameplay);
+	}
 }
 
 void AEnemyMercenary::StartReloadWeapon()
@@ -331,17 +413,12 @@ void AEnemyMercenary::StartReloadWeapon()
 	UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
 	if(Blackboard->GetValueAsBool("IsReloading"))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Reload] %s: Ya esta recargando, ignorado"), *GetName());
-
 		return;
 	}
 
 	Blackboard->SetValueAsBool("IsReloading", true);
 
 	float Duration = ReloadTime > 0.f ? ReloadTime : 2.0f;
-
-	UE_LOG(LogTemp, Warning, TEXT("[Reload] %s: INICIO recarga. Duracion=%.1fs | Role=%d"),
-		*GetName(), Duration, (int32)RoleType);
 
 	GetWorldTimerManager().SetTimer(
 		ReloadTimerHandle,
@@ -361,8 +438,6 @@ void AEnemyMercenary::StartReloadWeapon()
 			{
 				AIC->GetBlackboardComponent()->SetValueAsBool(FName("IsReloading"), false);
 			}
-		UE_LOG(LogTemp, Warning, TEXT("[Reload] %s: FIN recarga. Ammo=%.0f"),
-			*GetName(), AmmoCount);
 		},
 		Duration,
 		false
@@ -416,7 +491,11 @@ void AEnemyMercenary::StopSuppressionFire()
 	bIsSupressing = false;
 	SuppressionTargetLocation = FVector::ZeroVector;
 	CurrentAimTarget = nullptr;
-	EquippedWeapon->StopFiring();
+	if (EquippedWeapon)
+	{
+		EquippedWeapon->StopFiring();
+	}
+	
 }
 
 void AEnemyMercenary::AssignSupressorRole()
@@ -427,8 +506,10 @@ void AEnemyMercenary::AssignSupressorRole()
 		return;
 	}
 
-	AIController->GetBlackboardComponent()->SetValueAsBool("IsSupressor", true);
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsSuppressor", true);
 	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", false);
+
+	SetMovementState(false);
 }
 
 void AEnemyMercenary::AssignFlankerRole()
@@ -438,12 +519,17 @@ void AEnemyMercenary::AssignFlankerRole()
 	{
 		return;
 	}
-	AIController->GetBlackboardComponent()->SetValueAsBool("IsSupressor", false);
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsSuppressor", false);
 	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", true);
+
+	SetMovementState(true);
 }
 
 void AEnemyMercenary::ClearCombatRole()
 {
+	StopSuppressionFire();
+	StopShooting();
+
 	bIsSupressing = false;
 	AAIController* AIController = Cast<AAIController>(GetController());
 	if (!AIController || !AIController->GetBlackboardComponent())
@@ -451,7 +537,7 @@ void AEnemyMercenary::ClearCombatRole()
 		return;
 	}
 
-	AIController->GetBlackboardComponent()->SetValueAsBool("IsSupressor", false);
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsSuppressor", false);
 	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", false);
 }
 

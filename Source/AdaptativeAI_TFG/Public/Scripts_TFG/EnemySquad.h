@@ -45,6 +45,8 @@ public:
 
 	FTimerHandle SquadBrainTimerHandle;
 
+	FVector FlankInitiatedAtPosition;
+
 	void InitializeSquad(const TArray<AEnemyMercenary*>& Members);
 
 	UFUNCTION(BlueprintCallable, Category = "Squad")

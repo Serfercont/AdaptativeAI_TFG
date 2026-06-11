@@ -56,7 +56,7 @@ public:
 
 	AEnemyMercenary();
 
-	UPROPERTY(EditAnywhere, Category = "AI | Organization")
+	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = "AI | Organization")
 	EEnemyRole RoleType;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Organization")
@@ -172,6 +172,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
 	void FindCoverPosition(AActor* ThreatActor);
 
+	UFUNCTION(BlueprintCallable, Category = "AI | Blackboard")
 	void UpdateBlackboardValues();
 
 	void EvaluateUtilityScores();
@@ -278,5 +279,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void StopShooting();
+
+	FTimerHandle InitHandle;
+
+	virtual void Tick(float DeltaTime) override;
+	float BlackboardUpdateAccumulator = 0.f;
+	static constexpr float BlackboardUpdateInterval = 0.1f;
 
 };

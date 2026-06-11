@@ -10,6 +10,9 @@ AEnemySquad::AEnemySquad()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	CurrentPlayerStrategy = EPlayerStrategy::None;
+
+	CampingMovementThreshold = 200;
+	CampingDetectionTime = 5.0f;
 }
 
 void AEnemySquad::BeginPlay()
@@ -85,12 +88,24 @@ void AEnemySquad::EvaluateSquadStrategy()
 	if (DistanceMoved > CampingMovementThreshold)
 	{
 		LastRecordedPlayerPosition = CurrentPlayerPosition;
-		PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
 
-		if (bFlankActivated)
+		if (!bFlankActivated)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[Squad] Jugador se movio. Cancelando flanqueo."));
+			PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
+		}
+		return;
+	}
+
+	if (bFlankActivated)
+	{
+		float DistFromFlankOrigin = FVector::Dist(CurrentPlayerPosition, FlankInitiatedAtPosition);
+		if (DistFromFlankOrigin > 1500.f)
+		{
 			CancelFlanking();
+		}
+		else
+		{
+			UpdateSuppressionTargets(CurrentPlayerPosition);
 		}
 		return;
 	}
@@ -209,14 +224,17 @@ void AEnemySquad::AlertAllMembers(AActor* TargetPlayer)
 
 void AEnemySquad::CoordinateFlankAndSupress()
 {
-	bFlankActivated = true;
 
 	TArray<AEnemyMercenary*> ActiveMembers;
 	for (AEnemyMercenary* Member : SquadMembers)
 	{
 		if (Member && Member->CurrentHealth > 0)
 		{
-			ActiveMembers.Add(Member);
+			AAIController* AIC = Cast<AAIController>(Member->GetController());
+			if (AIC && AIC->GetBlackboardComponent() && AIC->GetBlackboardComponent()->GetValueAsObject(FName("TargetActor")))
+			{
+				ActiveMembers.Add(Member);
+			}
 		}
 	}
 
@@ -225,6 +243,8 @@ void AEnemySquad::CoordinateFlankAndSupress()
 	{
 		return;
 	}
+
+	bFlankActivated = true;
 
 	int32 NumFlankers = FMath::Max(1, FMath::FloorToInt(TotalActive * 0.35f));
 	int32 NumSuppressors = TotalActive - NumFlankers;
@@ -260,6 +280,8 @@ void AEnemySquad::CoordinateFlankAndSupress()
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange,
 			FString::Printf(TEXT("FLANQUEO: %d supresores, %d flanqueadores"), NumSuppressors, NumFlankers));
 	}
+
+	FlankInitiatedAtPosition = LastRecordedPlayerPosition;
 }
 
 void AEnemySquad::CancelFlanking()

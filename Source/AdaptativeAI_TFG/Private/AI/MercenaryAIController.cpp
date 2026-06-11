@@ -58,7 +58,6 @@ void AMercenaryAIController::HandlePerceptionUpdate(AActor* Actor, FAIStimulus S
 		{
 			MercenaryPawn->MySquad->AlertAllMembers(Actor);
 		}
-		MercenaryPawn->EnterCombat();
 	}
 	else
 	{
