@@ -211,6 +211,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
 	FVector CalculateFlankPosition(AActor* ThreatActor);
 
+	UFUNCTION(BlueprintCallable)
+	void RefreshSuppressionFocalPoint(FVector NewTarget);
+
 	// Active when the mercenary is under heavy fire, making it take cover to reduce incoming damage
 	void TakeCover();
 

@@ -45,6 +45,16 @@ void AEnemyMercenary::BeginPlay()
 
 	GetWorldTimerManager().SetTimer(InitHandle, this, &AEnemyMercenary::InitializeByRole, 1.2f, false);
 
+	FTimerHandle TempHandle;
+	GetWorldTimerManager().SetTimer(TempHandle, [this]()
+		{
+			AAIController* AIC = Cast<AAIController>(GetController());
+			if (AIC && AIC->GetBlackboardComponent())
+			{
+				AIC->GetBlackboardComponent()->SetValueAsFloat("ApproachRadius", 1600.f);
+			}
+		}, 0.1f, false);
+
 	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this, &AEnemyMercenary::EvaluateUtilityScores, 0.5f, true);
 }
 
@@ -136,28 +146,34 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 		return false;
 	}
 
+	if(bIsSupressing)
+	{
+		return true;
+	}
+
 	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
 	if(DistanceToTarget > EffectiveRange)
 	{
 		return false;
 	}
 
-	if (EquippedWeapon)
-	{
-		CurrentAimTarget = Target;
-		EquippedWeapon->StartFiring();
-		return true;
-	}
-
-	if(AmmoCount <= 0.f)
+	if (AmmoCount <= 0.f)
 	{
 		return false;
 	}
 
-	UGameplayStatics::ApplyDamage(Target, Damage, GetController(), this, UDamageType::StaticClass());
-	
-	AmmoCount--;
-	UpdateBlackboardValues();
+	CurrentAimTarget = Target;
+
+	if (EquippedWeapon)
+	{
+		EquippedWeapon->StartFiring();
+	}
+	else
+	{
+		UGameplayStatics::ApplyDamage(Target, Damage, GetController(), this, UDamageType::StaticClass());
+		AmmoCount--;
+		UpdateBlackboardValues();
+	}
 	return true;
 }
 
@@ -294,36 +310,50 @@ void AEnemyMercenary::UpdateBlackboardValues()
 
 	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
 
-	Blackboard->SetValueAsBool("IsInRange", false);
-	Blackboard->SetValueAsBool("HasClearLineOfSight", false);
-	if(TargetPlayer)
+	bool bWasInRange = Blackboard->GetValueAsBool("IsInRange");
+
+	bool bNewInRange = false;
+	bool bNewHasSight = false;
+
+	if (TargetPlayer)
 	{
 		float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
 		Blackboard->SetValueAsFloat("DistanceToPlayer", DistanceToPlayer);
 
-		bool bCurrentlyInRange = Blackboard->GetValueAsBool("IsInRange");
-		bool bNewInRange;
-		if (bCurrentlyInRange)
-		{
-			bNewInRange = DistanceToPlayer <= (EffectiveRange * 1.1f);
-		}
-		else
-		{
-			bNewInRange = DistanceToPlayer <= EffectiveRange;
-		}
-		Blackboard->SetValueAsBool("IsInRange", bNewInRange);
+		float RangeThreshold = bWasInRange ? (EffectiveRange * 1.1f) : EffectiveRange;
+		bNewInRange = DistanceToPlayer <= RangeThreshold;
 
 		FHitResult Hit;
-		FVector StartLoc = GetActorLocation() + FVector(0.f, 0.f, 60.f);
-		FVector EndLoc = TargetPlayer->GetActorLocation() + FVector(0.f, 0.f, 60.f);
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
+		bool bTraceHit = GetWorld()->LineTraceSingleByChannel(
+			Hit,
+			GetActorLocation() + FVector(0, 0, 60),
+			TargetPlayer->GetActorLocation() + FVector(0, 0, 60),
+			ECC_Visibility, Params);
+		bNewHasSight = !bTraceHit || (Hit.GetActor() == TargetPlayer);
 
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(this);
-		QueryParams.AddIgnoredActor(TargetPlayer);
+		if (bIsInCombat && !bIsSupressing)
+		{
+			AMercenaryAIController* MercAIC = Cast<AMercenaryAIController>(GetController());
+			if (MercAIC && MercAIC->GetFocusActor() != TargetPlayer)
+			{
+				MercAIC->SetFocus(TargetPlayer, EAIFocusPriority::Gameplay);
+			}
+		}
+	}
+	else
+	{
+		Blackboard->SetValueAsFloat("DistanceToPlayer", 999999.f);
+	}
 
-		bool bHitCover = GetWorld()->LineTraceSingleByChannel(Hit, StartLoc, EndLoc, ECC_Visibility, QueryParams);
-
-		Blackboard->SetValueAsBool("HasClearLineOfSight", !bHitCover);
+	if (Blackboard->GetValueAsBool("IsInRange") != bNewInRange)
+	{
+		Blackboard->SetValueAsBool("IsInRange", bNewInRange);
+	}
+	if (Blackboard->GetValueAsBool("HasClearLineOfSight") != bNewHasSight)
+	{
+		Blackboard->SetValueAsBool("HasClearLineOfSight", bNewHasSight);
 	}
 
 	if (bIsInCombat)
@@ -483,6 +513,14 @@ void AEnemyMercenary::PerformSuppressionFire(FVector TargetLocation)
 	);
 
 	CurrentAimTarget = nullptr;
+
+	AMercenaryAIController* AIController = Cast<AMercenaryAIController>(GetController());
+	if (AIController)
+	{
+		AIController->ClearFocus(EAIFocusPriority::Gameplay);
+		AIController->SetFocalPoint(SuppressionTargetLocation, EAIFocusPriority::Gameplay);
+	}
+	SetMovementState(false);
 	EquippedWeapon->StartFiring();
 }
 
@@ -496,6 +534,12 @@ void AEnemyMercenary::StopSuppressionFire()
 		EquippedWeapon->StopFiring();
 	}
 	
+	AMercenaryAIController* AIController = Cast<AMercenaryAIController>(GetController());
+	if (AIController)
+	{
+		AIController->ClearFocus(EAIFocusPriority::Gameplay);
+	}
+	SetMovementState(true);
 }
 
 void AEnemyMercenary::AssignSupressorRole()
@@ -508,8 +552,6 @@ void AEnemyMercenary::AssignSupressorRole()
 
 	AIController->GetBlackboardComponent()->SetValueAsBool("IsSuppressor", true);
 	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", false);
-
-	SetMovementState(false);
 }
 
 void AEnemyMercenary::AssignFlankerRole()
@@ -568,14 +610,26 @@ FVector AEnemyMercenary::CalculateFlankPosition(AActor* ThreatActor)
 	return PlayerLocation + FlankDirection * 800.f;
 }
 
-
-void AEnemyMercenary::TakeCover()
+void AEnemyMercenary::RefreshSuppressionFocalPoint(FVector NewTarget)
 {
+	if (!bIsSupressing)
+	{
+		return;
+	}
+
+	SuppressionTargetLocation = NewTarget + FVector(
+		FMath::RandRange(-80.f, 80.f),
+		FMath::RandRange(-80.f, 80.f),
+		FMath::RandRange(0.f, 40.f)
+	);
+
+	AMercenaryAIController* AIController = Cast<AMercenaryAIController>(GetController());
+	if (AIController)
+	{
+		AIController->SetFocalPoint(SuppressionTargetLocation, EAIFocusPriority::Gameplay);
+	}
 }
 
-void AEnemyMercenary::FlankEnemy()
-{
-}
 
 void AEnemyMercenary::CommunicateWithSquad()
 {
@@ -588,42 +642,6 @@ void AEnemyMercenary::CommunicateWithSquad()
 			MySquad->SharePlayerLocation(TargetPlayer);
 		}
 	}
-}
-
-void AEnemyMercenary::SuppressEnemy()
-{
-}
-
-void AEnemyMercenary::UpdateStressLevel(float DeltaTime)
-{
-}
-
-void AEnemyMercenary::SquadOrganization()
-{
-}
-
-void AEnemyMercenary::TactialRetreat()
-{
-}
-
-void AEnemyMercenary::DefensiveMode()
-{
-}
-
-void AEnemyMercenary::CleanRoom()
-{
-}
-
-void AEnemyMercenary::IntensiveResearch()
-{
-}
-
-void AEnemyMercenary::SniperMode()
-{
-}
-
-void AEnemyMercenary::AggressiveMode()
-{
 }
 
 void AEnemyMercenary::AttachWeaponMeshes(AShooterWeapon* WeaponToAttach)
@@ -668,9 +686,25 @@ FVector AEnemyMercenary::GetWeaponTargetLocation()
 
 void AEnemyMercenary::UpdateWeaponHUD(int32 CurrentAmmo, int32 MagazineSize)
 {
+	float PrevAmmo = AmmoCount;
 	AmmoCount = static_cast<float>(CurrentAmmo);
-	UpdateBlackboardValues();
-	UE_LOG(LogTemp, Warning, TEXT("[Ammo] %s: Ammo=%d / %d"), *GetName(), CurrentAmmo, MagazineSize);
+
+	if (AmmoCount <= 0.f && PrevAmmo > 0.f)
+	{
+		AAIController* AIC = Cast<AAIController>(GetController());
+		if (AIC && AIC->GetBlackboardComponent())
+		{
+			AIC->GetBlackboardComponent()->SetValueAsFloat("AmmoCount", AmmoCount);
+		}
+	}
+	else if (AmmoCount > 0.f)
+	{
+		AAIController* AIC = Cast<AAIController>(GetController());
+		if (AIC && AIC->GetBlackboardComponent())
+		{
+			AIC->GetBlackboardComponent()->SetValueAsFloat("AmmoCount", AmmoCount);
+		}
+	}
 }
 
 void AEnemyMercenary::OnSemiWeaponRefire()

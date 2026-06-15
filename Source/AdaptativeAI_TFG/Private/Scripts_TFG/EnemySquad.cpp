@@ -5,6 +5,7 @@
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Engine/Engine.h"
+#include <AI/MercenaryAIController.h>
 
 AEnemySquad::AEnemySquad()
 {
@@ -101,7 +102,24 @@ void AEnemySquad::EvaluateSquadStrategy()
 		float DistFromFlankOrigin = FVector::Dist(CurrentPlayerPosition, FlankInitiatedAtPosition);
 		if (DistFromFlankOrigin > 1500.f)
 		{
-			CancelFlanking();
+			bool bAnyMemberReloading = false;
+			for(AEnemyMercenary* Member : SquadMembers)
+			{
+				if (!Member) continue;
+				AAIController* AIC = Cast<AAIController>(Member->GetController());
+				if (AIC && AIC->GetBlackboardComponent())
+				{
+					if (AIC->GetBlackboardComponent()->GetValueAsBool(FName("IsReloading")))
+					{
+						bAnyMemberReloading = true;
+						break;
+					}
+				}
+			}
+			if(!bAnyMemberReloading)
+			{
+				CancelFlanking();
+			}
 		}
 		else
 		{
@@ -265,7 +283,7 @@ void AEnemySquad::CoordinateFlankAndSupress()
 		else
 		{
 			ActiveMembers[i]->AssignSupressorRole();
-			ActiveMembers[i]->PerformSuppressionFire(LastRecordedPlayerPosition);
+			//ActiveMembers[i]->PerformSuppressionFire(LastRecordedPlayerPosition);
 
 			AAIController* AIController = Cast<AAIController>(ActiveMembers[i]->GetController());
 			if (AIController && AIController->GetBlackboardComponent())
@@ -307,11 +325,17 @@ void AEnemySquad::UpdateSuppressionTargets(FVector TargetLoc)
 	{
 		if (Member && Member->bIsSupressing)
 		{
-			Member->SuppressionTargetLocation = TargetLoc;
+			Member->SuppressionTargetLocation = TargetLoc + FVector(FMath::RandRange(-150.f, 150.f), FMath::RandRange(-150.f, 150.f), FMath::RandRange(0.f, 60.f));
 			AAIController* AIController = Cast<AAIController>(Member->GetController());
 			if(AIController && AIController->GetBlackboardComponent())
 			{
-				AIController->GetBlackboardComponent()->SetValueAsVector(FName("SuppressionTarget"), TargetLoc);
+				AIController->GetBlackboardComponent()->SetValueAsVector(FName("SuppressionTarget"), Member->SuppressionTargetLocation);
+
+				AMercenaryAIController* ControllerAI = Cast<AMercenaryAIController>(AIController);
+				if(ControllerAI)
+				{
+					ControllerAI->SetFocalPoint(Member->SuppressionTargetLocation, EAIFocusPriority::Gameplay);
+				}
 			}
 		}
 	}
