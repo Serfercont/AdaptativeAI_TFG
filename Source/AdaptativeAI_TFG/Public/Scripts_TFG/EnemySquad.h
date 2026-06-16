@@ -10,6 +10,16 @@
 /**
  * 
  */
+
+UENUM(BlueprintType)
+enum class EPlayerStrategy : uint8
+{
+	None UMETA(DisplayName = "None"),
+	Agressive UMETA(DisplayName = "Agressive"),
+	Camping UMETA(DisplayName = "Camping"),
+	Silent UMETA(DisplayName = "Silent"),
+};
+
 UCLASS()
 class ADAPTATIVEAI_TFG_API AEnemySquad : public AInfo
 {
@@ -31,6 +41,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Squad")
 	float CampingMovementThreshold = 300.0f;
+
+	bool ResolvePlayerTarget(FVector& OutPlayerPosition, AActor*& OutTargetPlayer);
+	EPlayerStrategy ClassifyPlayer(const FVector& CurrentPlayerPosition);
+	void EnterStrategy(EPlayerStrategy NewStrategy);
+	void TickStrategy(EPlayerStrategy Strategy, const FVector& CurrentPlayerPosition, AActor* TargetPlayer);
+	void ExitStrategy(EPlayerStrategy OldStrategy);
 
 public: 
 

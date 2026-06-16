@@ -21,15 +21,6 @@ enum class EEnemyRole : uint8
 };
 
 UENUM(BlueprintType)
-enum class EPlayerStrategy : uint8
-{
-	None UMETA(DisplayName = "None"),
-	Agressive UMETA(DisplayName = "Agressive"),
-	Defensive UMETA(DisplayName = "Defensive"),
-	Silent UMETA(DisplayName = "Silent"),
-};
-
-UENUM(BlueprintType)
 enum class ESquadOrder : uint8
 {
 	None UMETA(DisplayName = "None"),

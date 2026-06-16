@@ -21,6 +21,153 @@ void AEnemySquad::BeginPlay()
 	Super::BeginPlay();
 }
 
+bool AEnemySquad::ResolvePlayerTarget(FVector& OutPlayerPosition, AActor*& OutTargetPlayer)
+{
+	OutPlayerPosition = FVector::ZeroVector;
+	OutTargetPlayer = nullptr;
+	bool bAnyMemberHasTarget = false;
+
+	for (AEnemyMercenary* Member : SquadMembers)
+	{
+		if (!Member) continue;
+		AAIController* AIC = Cast<AAIController>(Member->GetController());
+		if (!AIC || !AIC->GetBlackboardComponent()) continue;
+
+		UBlackboardComponent* BB = AIC->GetBlackboardComponent();
+		OutTargetPlayer = Cast<AActor>(BB->GetValueAsObject(FName("TargetActor")));
+
+		if (OutTargetPlayer)
+		{
+			bAnyMemberHasTarget = true;
+			OutPlayerPosition = OutTargetPlayer->GetActorLocation();
+			break;
+		}
+
+		FVector LastKnown = BB->GetValueAsVector(FName("LastKnownLocation"));
+		if (!LastKnown.IsZero())
+		{
+			bAnyMemberHasTarget = true;
+			OutPlayerPosition = LastKnown;
+		}
+	}
+
+	return bAnyMemberHasTarget;
+}
+
+EPlayerStrategy AEnemySquad::ClassifyPlayer(const FVector& CurrentPlayerPosition)
+{
+	float DistanceMoved = FVector::Dist(CurrentPlayerPosition, LastRecordedPlayerPosition);
+
+	if (DistanceMoved > CampingMovementThreshold)
+	{
+		LastRecordedPlayerPosition = CurrentPlayerPosition;
+
+		if (!bFlankActivated)
+		{
+			PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
+			return EPlayerStrategy::None;
+		}
+		return EPlayerStrategy::Camping;
+	}
+	if (bFlankActivated)
+	{
+		return EPlayerStrategy::Camping;
+	}
+	float TimeStationary = GetWorld()->GetTimeSeconds() - PlayerStationaryStartTime;
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,
+			FString::Printf(TEXT("[Squad] Jugador quieto %.1fs / %.1fs para flanqueo"),
+				TimeStationary, CampingDetectionTime));
+	}
+
+	if (TimeStationary >= CampingDetectionTime)
+	{
+		return EPlayerStrategy::Camping;
+	}
+
+	return EPlayerStrategy::None;
+}
+
+void AEnemySquad::EnterStrategy(EPlayerStrategy NewStrategy)
+{
+	switch (NewStrategy)
+	{
+	case EPlayerStrategy::Camping:
+		UE_LOG(LogTemp, Warning, TEXT("[Squad] JUGADOR CAMPEANDO. INICIANDO FLANQUEO."));
+		if (!bFlankActivated)
+		{
+			CoordinateFlankAndSupress();
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+void AEnemySquad::TickStrategy(EPlayerStrategy Strategy, const FVector& CurrentPlayerPosition, AActor* TargetPlayer)
+{
+	switch (Strategy)
+	{
+	case EPlayerStrategy::Camping:
+	{
+		if (!bFlankActivated)
+		{
+			break;
+		}
+
+		float DistFromFlankOrigin = FVector::Dist(CurrentPlayerPosition, FlankInitiatedAtPosition);
+		if (DistFromFlankOrigin > 1500.f)
+		{
+			bool bAnyMemberReloading = false;
+			for(AEnemyMercenary* Member : SquadMembers)
+			{
+				if (!Member) continue;
+				AAIController* AIC = Cast<AAIController>(Member->GetController());
+				if (AIC && AIC->GetBlackboardComponent() &&	AIC->GetBlackboardComponent()->GetValueAsBool(FName("IsReloading")))
+				{
+					bAnyMemberReloading = true;
+					break;
+				}
+			}
+			if(!bAnyMemberReloading)
+			{
+				ExitStrategy(EPlayerStrategy::Camping);
+				CurrentPlayerStrategy = EPlayerStrategy::None;
+				PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
+				LastRecordedPlayerPosition = CurrentPlayerPosition;
+			}
+		}
+		else
+		{
+			UpdateSuppressionTargets(CurrentPlayerPosition);
+		}
+		break;
+	}
+
+	default:
+		break;
+	}
+}
+
+void AEnemySquad::ExitStrategy(EPlayerStrategy OldStrategy)
+{
+	switch (OldStrategy)
+	{
+	case EPlayerStrategy::Camping:
+		if (bFlankActivated)
+		{
+			CancelFlanking();
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
 void AEnemySquad::InitializeSquad(const TArray<AEnemyMercenary*>& Members)
 {
 	SquadMembers = Members;
@@ -36,44 +183,19 @@ void AEnemySquad::InitializeSquad(const TArray<AEnemyMercenary*>& Members)
 
 void AEnemySquad::EvaluateSquadStrategy()
 {
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(1, 0.5f, FColor::Cyan, TEXT("Cerebro de Escuadron evaluando tacticas..."));
-	}
-
 	FVector CurrentPlayerPosition = FVector::ZeroVector;
-	bool bAnyMemberHasTarget = false;
 	AActor* TargetPlayer = nullptr;
-
-	for (AEnemyMercenary* Member : SquadMembers)
-	{
-		if (!Member) continue;
-		AAIController* AIC = Cast<AAIController>(Member->GetController());
-		if (!AIC || !AIC->GetBlackboardComponent()) continue;
-
-		UBlackboardComponent* BB = AIC->GetBlackboardComponent();
-		TargetPlayer = Cast<AActor>(BB->GetValueAsObject(FName("TargetActor")));
-
-		if (TargetPlayer)
-		{
-			bAnyMemberHasTarget = true;
-			CurrentPlayerPosition = TargetPlayer->GetActorLocation();
-			break;
-		}
-
-		FVector LastKnown = BB->GetValueAsVector(FName("LastKnownLocation"));
-		if (!LastKnown.IsZero())
-		{
-			bAnyMemberHasTarget = true;
-			CurrentPlayerPosition = LastKnown;
-		}
-	}
+	bool bAnyMemberHasTarget = ResolvePlayerTarget(CurrentPlayerPosition, TargetPlayer);
 
 	if (!bAnyMemberHasTarget)
 	{
+		if (CurrentPlayerStrategy != EPlayerStrategy::None)
+		{
+			ExitStrategy(CurrentPlayerStrategy);
+			CurrentPlayerStrategy = EPlayerStrategy::None;
+		}
 		PlayerStationaryStartTime = -1.f;
 		LastRecordedPlayerPosition = FVector::ZeroVector;
-		if (bFlankActivated) CancelFlanking();
 		return;
 	}
 
@@ -84,69 +206,16 @@ void AEnemySquad::EvaluateSquadStrategy()
 		return;
 	}
 
-	float DistanceMoved = FVector::Dist(CurrentPlayerPosition, LastRecordedPlayerPosition);
+	EPlayerStrategy DetectedStrategy = ClassifyPlayer(CurrentPlayerPosition);
 
-	if (DistanceMoved > CampingMovementThreshold)
+	if (DetectedStrategy != CurrentPlayerStrategy)
 	{
-		LastRecordedPlayerPosition = CurrentPlayerPosition;
-
-		if (!bFlankActivated)
-		{
-			PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
-		}
-		return;
+		ExitStrategy(CurrentPlayerStrategy);
+		EnterStrategy(DetectedStrategy);
+		CurrentPlayerStrategy = DetectedStrategy;
 	}
 
-	if (bFlankActivated)
-	{
-		float DistFromFlankOrigin = FVector::Dist(CurrentPlayerPosition, FlankInitiatedAtPosition);
-		if (DistFromFlankOrigin > 1500.f)
-		{
-			bool bAnyMemberReloading = false;
-			for(AEnemyMercenary* Member : SquadMembers)
-			{
-				if (!Member) continue;
-				AAIController* AIC = Cast<AAIController>(Member->GetController());
-				if (AIC && AIC->GetBlackboardComponent())
-				{
-					if (AIC->GetBlackboardComponent()->GetValueAsBool(FName("IsReloading")))
-					{
-						bAnyMemberReloading = true;
-						break;
-					}
-				}
-			}
-			if(!bAnyMemberReloading)
-			{
-				CancelFlanking();
-			}
-		}
-		else
-		{
-			UpdateSuppressionTargets(CurrentPlayerPosition);
-		}
-		return;
-	}
-	
-
-	float TimeStationary = GetWorld()->GetTimeSeconds() - PlayerStationaryStartTime;
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,
-			FString::Printf(TEXT("[Squad] Jugador quieto %.1fs / %.1fs para flanqueo"),
-				TimeStationary, CampingDetectionTime));
-	}
-
-	if (!bFlankActivated && TimeStationary >= CampingDetectionTime)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Squad] JUGADOR CAMPEANDO %.1fs. INICIANDO FLANQUEO."),TimeStationary);
-		CoordinateFlankAndSupress();
-	}
-	else if (bFlankActivated && TargetPlayer)
-	{
-		UpdateSuppressionTargets(CurrentPlayerPosition);
-	}
+	TickStrategy(CurrentPlayerStrategy, CurrentPlayerPosition, TargetPlayer);
 	
 }
 
@@ -176,28 +245,6 @@ void AEnemySquad::SharePlayerLocation(AActor* TargetPlayer)
 	}
 }
 
-/*bool AEnemySquad::RequestAttackSlot(AEnemyMercenary* RequestingMember)
-{
-	if(CurrentAttackers.Contains(RequestingMember))
-	{
-		return true;
-	}
-	if(CurrentAttackers.Num() >= MaxAttackSlots)
-	{
-		return false;
-	}
-	CurrentAttackers.Add(RequestingMember);
-	return true;
-}
-
-void AEnemySquad::ReleaseAttackSlot(AEnemyMercenary* ReleasingMember)
-{
-	if(CurrentAttackers.Contains(ReleasingMember))
-	{
-		CurrentAttackers.Remove(ReleasingMember);
-	}
-}*/
-
 void AEnemySquad::RemoveMemeber(AEnemyMercenary* MemberToRemove)
 {
 	if(!MemberToRemove)
@@ -206,8 +253,6 @@ void AEnemySquad::RemoveMemeber(AEnemyMercenary* MemberToRemove)
 	}
 
 	SquadMembers.Remove(MemberToRemove);
-
-	//ReleaseAttackSlot(MemberToRemove);
 
 	if(SquadMembers.Num() == 0)
 	{
@@ -283,7 +328,6 @@ void AEnemySquad::CoordinateFlankAndSupress()
 		else
 		{
 			ActiveMembers[i]->AssignSupressorRole();
-			//ActiveMembers[i]->PerformSuppressionFire(LastRecordedPlayerPosition);
 
 			AAIController* AIController = Cast<AAIController>(ActiveMembers[i]->GetController());
 			if (AIController && AIController->GetBlackboardComponent())

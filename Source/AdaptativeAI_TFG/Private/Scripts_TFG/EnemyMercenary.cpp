@@ -106,38 +106,6 @@ void AEnemyMercenary::ExitCombat()
 	}
 }
 
-/*bool AEnemyMercenary::RequestAttackSlot()
-{
-	if(!MySquad)
-	{
-		return false;
-	}
-
-	bool bHasSlot = MySquad->RequestAttackSlot(this);
-
-	AAIController* AIController = Cast<AAIController>(GetController());
-	if(AIController && AIController->GetBlackboardComponent())
-	{
-		AIController->GetBlackboardComponent()->SetValueAsBool("HasAttackSlot", bHasSlot);
-	}
-
-	return bHasSlot;
-}
-
-void AEnemyMercenary::ReleaseAttackSlot()
-{
-	if (!MySquad)
-	{
-		return;
-	}
-
-	MySquad->ReleaseAttackSlot(this);
-	AAIController* AIController = Cast<AAIController>(GetController());
-	if (AIController && AIController->GetBlackboardComponent())
-	{
-		AIController->GetBlackboardComponent()->SetValueAsBool("HasAttackSlot", false);
-	}
-}*/
 
 bool AEnemyMercenary::PerformShoot(AActor* Target)
 {
