@@ -36,17 +36,32 @@ protected:
 
 	float PlayerStationaryStartTime = -1.0f;
 
+	int32 RecentKills = 0;
+	float LastKillTime = 0.0f;
+	bool bDefensiveActive = false;
+	FVector DefenseInitPosition = FVector::ZeroVector;
+
 	UPROPERTY(EditAnywhere, Category = "Squad")
 	float CampingDetectionTime = 5.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Squad")
 	float CampingMovementThreshold = 300.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Squad")
+	float KillWindowDuration = 12.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Squad")
+	int32 agressiveKillThreshold = 2;
+
+
 	bool ResolvePlayerTarget(FVector& OutPlayerPosition, AActor*& OutTargetPlayer);
 	EPlayerStrategy ClassifyPlayer(const FVector& CurrentPlayerPosition);
 	void EnterStrategy(EPlayerStrategy NewStrategy);
 	void TickStrategy(EPlayerStrategy Strategy, const FVector& CurrentPlayerPosition, AActor* TargetPlayer);
 	void ExitStrategy(EPlayerStrategy OldStrategy);
+
+	void CoordinateDefensiveRetreat();
+	void CancelDefensiveRetreat();
 
 public: 
 

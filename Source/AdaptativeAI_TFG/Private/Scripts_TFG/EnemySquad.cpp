@@ -25,7 +25,9 @@ bool AEnemySquad::ResolvePlayerTarget(FVector& OutPlayerPosition, AActor*& OutTa
 {
 	OutPlayerPosition = FVector::ZeroVector;
 	OutTargetPlayer = nullptr;
-	bool bAnyMemberHasTarget = false;
+	
+	FVector FallbackLocation = FVector::ZeroVector;
+	bool bHasFallbackLocation = false;
 
 	for (AEnemyMercenary* Member : SquadMembers)
 	{
@@ -34,28 +36,54 @@ bool AEnemySquad::ResolvePlayerTarget(FVector& OutPlayerPosition, AActor*& OutTa
 		if (!AIC || !AIC->GetBlackboardComponent()) continue;
 
 		UBlackboardComponent* BB = AIC->GetBlackboardComponent();
-		OutTargetPlayer = Cast<AActor>(BB->GetValueAsObject(FName("TargetActor")));
+		
+		AActor* Candidate = Cast<AActor>(BB->GetValueAsObject(FName("TargetActor")));
 
-		if (OutTargetPlayer)
+		if (Candidate)
 		{
-			bAnyMemberHasTarget = true;
-			OutPlayerPosition = OutTargetPlayer->GetActorLocation();
-			break;
+			OutTargetPlayer = Candidate;
+			OutPlayerPosition = Candidate->GetActorLocation();
+			return true;
 		}
-
-		FVector LastKnown = BB->GetValueAsVector(FName("LastKnownLocation"));
-		if (!LastKnown.IsZero())
+		if (!bHasFallbackLocation)
 		{
-			bAnyMemberHasTarget = true;
-			OutPlayerPosition = LastKnown;
+			FVector LastKnown = BB->GetValueAsVector(FName("LastKnownLocation"));
+			if(!LastKnown.IsZero())
+			{
+				FallbackLocation = LastKnown;
+				bHasFallbackLocation = true;
+			}
 		}
 	}
 
-	return bAnyMemberHasTarget;
+	if(bHasFallbackLocation)
+	{
+		OutPlayerPosition = FallbackLocation;
+		return true;
+	}
+
+	return false;
 }
 
 EPlayerStrategy AEnemySquad::ClassifyPlayer(const FVector& CurrentPlayerPosition)
 {
+	float Now = GetWorld()->GetTimeSeconds();
+
+	if(LastKillTime > 0.f && (Now - LastKillTime) > KillWindowDuration)
+	{
+		RecentKills = 0;
+	}
+
+	if(RecentKills >= agressiveKillThreshold)
+	{
+		return EPlayerStrategy::Agressive;
+	}
+
+	if(bDefensiveActive)
+	{
+		return EPlayerStrategy::Agressive;
+	}
+
 	float DistanceMoved = FVector::Dist(CurrentPlayerPosition, LastRecordedPlayerPosition);
 
 	if (DistanceMoved > CampingMovementThreshold)
@@ -74,13 +102,6 @@ EPlayerStrategy AEnemySquad::ClassifyPlayer(const FVector& CurrentPlayerPosition
 		return EPlayerStrategy::Camping;
 	}
 	float TimeStationary = GetWorld()->GetTimeSeconds() - PlayerStationaryStartTime;
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,
-			FString::Printf(TEXT("[Squad] Jugador quieto %.1fs / %.1fs para flanqueo"),
-				TimeStationary, CampingDetectionTime));
-	}
 
 	if (TimeStationary >= CampingDetectionTime)
 	{
@@ -101,6 +122,13 @@ void AEnemySquad::EnterStrategy(EPlayerStrategy NewStrategy)
 			CoordinateFlankAndSupress();
 		}
 		break;
+	case EPlayerStrategy::Agressive:
+		UE_LOG(LogTemp, Warning, TEXT("[Squad] JUGADOR AGRESIVO. COORDINANDO RETIRADA DEFENSIVA."));
+		if (!bDefensiveActive)
+		{
+			CoordinateDefensiveRetreat();
+		}
+		break;
 
 	default:
 		break;
@@ -111,44 +139,66 @@ void AEnemySquad::TickStrategy(EPlayerStrategy Strategy, const FVector& CurrentP
 {
 	switch (Strategy)
 	{
-	case EPlayerStrategy::Camping:
-	{
-		if (!bFlankActivated)
+		case EPlayerStrategy::Camping:
 		{
+			if (!bFlankActivated)
+			{
+				break;
+			}
+
+			float DistFromFlankOrigin = FVector::Dist(CurrentPlayerPosition, FlankInitiatedAtPosition);
+			if (DistFromFlankOrigin > 1500.f)
+			{
+				bool bAnyMemberReloading = false;
+				for(AEnemyMercenary* Member : SquadMembers)
+				{
+					if (!Member) continue;
+					AAIController* AIC = Cast<AAIController>(Member->GetController());
+					if (AIC && AIC->GetBlackboardComponent() &&	AIC->GetBlackboardComponent()->GetValueAsBool(FName("IsReloading")))
+					{
+						bAnyMemberReloading = true;
+						break;
+					}
+				}
+				if(!bAnyMemberReloading)
+				{
+					ExitStrategy(EPlayerStrategy::Camping);
+					CurrentPlayerStrategy = EPlayerStrategy::None;
+					PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
+					LastRecordedPlayerPosition = CurrentPlayerPosition;
+				}
+			}
+			else
+			{
+				UpdateSuppressionTargets(CurrentPlayerPosition);
+			}
 			break;
 		}
 
-		float DistFromFlankOrigin = FVector::Dist(CurrentPlayerPosition, FlankInitiatedAtPosition);
-		if (DistFromFlankOrigin > 1500.f)
+		default:
+			break;
+
+		case EPlayerStrategy::Agressive:
 		{
-			bool bAnyMemberReloading = false;
-			for(AEnemyMercenary* Member : SquadMembers)
+			if (!bDefensiveActive)
 			{
-				if (!Member) continue;
-				AAIController* AIC = Cast<AAIController>(Member->GetController());
-				if (AIC && AIC->GetBlackboardComponent() &&	AIC->GetBlackboardComponent()->GetValueAsBool(FName("IsReloading")))
-				{
-					bAnyMemberReloading = true;
-					break;
-				}
+				break;
 			}
-			if(!bAnyMemberReloading)
+
+			float Now = GetWorld()->GetTimeSeconds();
+			bool bKillsExpired = (LastKillTime < 0.f) || ((Now - LastKillTime) > KillWindowDuration);
+			float DistFromOrigin = FVector::Dist(CurrentPlayerPosition, DefenseInitPosition);
+
+			if (bKillsExpired && DistFromOrigin > 2000.f)
 			{
-				ExitStrategy(EPlayerStrategy::Camping);
+				ExitStrategy(EPlayerStrategy::Agressive);
 				CurrentPlayerStrategy = EPlayerStrategy::None;
 				PlayerStationaryStartTime = GetWorld()->GetTimeSeconds();
 				LastRecordedPlayerPosition = CurrentPlayerPosition;
+				RecentKills = 0;
 			}
+			break;
 		}
-		else
-		{
-			UpdateSuppressionTargets(CurrentPlayerPosition);
-		}
-		break;
-	}
-
-	default:
-		break;
 	}
 }
 
@@ -162,9 +212,64 @@ void AEnemySquad::ExitStrategy(EPlayerStrategy OldStrategy)
 			CancelFlanking();
 		}
 		break;
+	case EPlayerStrategy::Agressive:
+		if (bDefensiveActive)
+		{
+			CancelDefensiveRetreat();
+		}
+		break;
 
 	default:
 		break;
+	}
+}
+
+void AEnemySquad::CoordinateDefensiveRetreat()
+{
+	TArray<AEnemyMercenary*> ActiveMembers;
+	for(AEnemyMercenary* Member : SquadMembers)
+	{
+		if(Member && Member->CurrentHealth > 0)
+		{
+			AAIController* AIC = Cast<AAIController>(Member->GetController());
+			if(AIC && AIC->GetBlackboardComponent() && AIC->GetBlackboardComponent()->GetValueAsObject(FName("TargetActor")))
+			{
+				ActiveMembers.Add(Member);
+			}
+		}
+	}
+
+	if(ActiveMembers.Num() == 0)
+	{
+		return;
+	}
+
+	bDefensiveActive = true;
+
+	for(AEnemyMercenary* Member : ActiveMembers)
+	{
+		Member->ClearCombatRole();
+		Member->AssignDefenderRole();
+	}
+
+	DefenseInitPosition = LastRecordedPlayerPosition;
+
+	if(GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red,
+			FString::Printf(TEXT("Escuadron: RETIRADA DEFENSIVA COORDINADA! %d mercenarios se reagrupan"), ActiveMembers.Num()));
+	}
+}
+
+void AEnemySquad::CancelDefensiveRetreat()
+{
+	bDefensiveActive = false;
+	for(AEnemyMercenary* Member : SquadMembers)
+	{
+		if(Member)
+		{
+			Member->ClearCombatRole();
+		}
 	}
 }
 
@@ -251,6 +356,15 @@ void AEnemySquad::RemoveMemeber(AEnemyMercenary* MemberToRemove)
 	{
 		return;
 	}
+
+	float Now = GetWorld()->GetTimeSeconds();
+	if(LastKillTime > 0.f && (Now - LastKillTime) > KillWindowDuration)
+	{
+		RecentKills = 0;
+	}
+
+	RecentKills++;
+	LastKillTime = Now;
 
 	SquadMembers.Remove(MemberToRemove);
 

@@ -56,7 +56,14 @@ void AMercenaryAIController::HandlePerceptionUpdate(AActor* Actor, FAIStimulus S
 	{
 		if(MercenaryPawn->MySquad)
 		{
-			MercenaryPawn->MySquad->AlertAllMembers(Actor);
+			if (MercenaryPawn->bIsInCombat)
+			{
+				MercenaryPawn->MySquad->SharePlayerLocation(Actor);
+			}
+			else
+			{
+				MercenaryPawn->MySquad->AlertAllMembers(Actor);
+			}
 		}
 	}
 	else

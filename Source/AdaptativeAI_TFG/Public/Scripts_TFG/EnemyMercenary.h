@@ -122,9 +122,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI | Weapon")
 	class AShooterWeapon* EquippedWeapon;
 
-	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
-	TSubclassOf<class AShooterWeapon> WeaponClass;
-
 	UPROPERTY(EditDefaultsOnly,Category = "AI | Weapon")
 	TSubclassOf<class AShooterWeapon> RifleWeaponClass;
 
@@ -139,6 +136,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "AI | Combat")
 	bool bIsSupressing = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "AI | Combat")
+	bool bIsDefending = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "AI | Combat")
 	FVector SuppressionTargetLocation = FVector::ZeroVector;
@@ -159,9 +159,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void InitializeByRole();
-
-	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
-	void FindCoverPosition(AActor* ThreatActor);
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Blackboard")
 	void UpdateBlackboardValues();
@@ -197,6 +194,9 @@ public:
 	void AssignFlankerRole();
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void AssignDefenderRole();
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void ClearCombatRole();
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
@@ -205,41 +205,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void RefreshSuppressionFocalPoint(FVector NewTarget);
 
-	// Active when the mercenary is under heavy fire, making it take cover to reduce incoming damage
-	void TakeCover();
-
-	// Active on Agressive Mode, syncronizing flank movement with other states.
-	void FlankEnemy();
-
 	// Active when the mercenary is in a squad, allowing it to share information about the player's position and coordinate attacks with other squad members.
 	void CommunicateWithSquad();
 
-	// Active when the mercenary is under heavy fire, making it suppress the player's position to reduce their accuracy and make it harder for them to attack the mercenary
-	void SuppressEnemy();
-
-	// Update a number that controls the mercenary's stress level, which can affect the behavior.
-	void UpdateStressLevel(float DeltaTime);
-
-	// Active at the beginning of the game, organizing the mercenaries into squads based on their roles and preferences, and assigning them to different areas of the map to control.
-	void SquadOrganization();
-
-	// Active when the mercenary is low on health or out of amo, making it retreat to a safe position to recover
-	void TactialRetreat();
-
-	// Active when the player is using a hit-and-run strategy, making the mercenary focus on defense and evasion to avoid taking damage
-	void DefensiveMode();
-
-	// Active when the player is using a close-range strategy, making the mercenary focus on clearing rooms and tight spaces to prevent the player from getting close
-	void CleanRoom();
-
-	// Active when the player is silent, making the mercenary focus on gathering information and researching the player
-	void IntensiveResearch();
-
-	// logic to the sniper type.
-	void SniperMode();
-
-	// Active when the player is using a defensive strategy. coordinating flank and supression function.
-	void AggressiveMode();
 
 	//ISHOOTERWEAPONHOLDER
 

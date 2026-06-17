@@ -78,19 +78,23 @@ void AEnemyMercenary::Tick(float DeltaTime)
 void AEnemyMercenary:: EnterCombat()
 {
 	bIsInCombat = true;
-	SetFacingMode(true);
 
 	AAIController* AIController = Cast<AAIController>(GetController());
 	bool bIsSuppressor = false;
+	bool bDefender = false;
 	if(AIController && AIController->GetBlackboardComponent())
 	{
 		bIsSuppressor = AIController->GetBlackboardComponent()->GetValueAsBool("IsSuppressor");
+		bDefender = AIController->GetBlackboardComponent()->GetValueAsBool("IsDefender");
 	}
 
-	if (!bIsSuppressor)
+	if (bIsSuppressor || bDefender)
 	{
-		SetMovementState(true);
+		return;
 	}
+
+	SetFacingMode(true);
+	SetMovementState(true);
 }
 
 void AEnemyMercenary::ExitCombat()
@@ -255,10 +259,6 @@ void AEnemyMercenary::InitializeByRole()
 		}
 	}
 	UpdateBlackboardValues();
-}
-
-void AEnemyMercenary::FindCoverPosition(AActor* ThreatActor)
-{
 }
 
 void AEnemyMercenary::UpdateBlackboardValues()
@@ -535,12 +535,45 @@ void AEnemyMercenary::AssignFlankerRole()
 	SetMovementState(true);
 }
 
+void AEnemyMercenary::AssignDefenderRole()
+{
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if (!AIController || !AIController->GetBlackboardComponent())
+	{
+		return;
+	}
+	
+	StopSuppressionFire();
+	StopShooting();
+
+	bIsDefending = true;
+	bIsSupressing = false;
+
+	UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
+	Blackboard->SetValueAsBool("IsSuppressor", false);
+	Blackboard->SetValueAsBool("IsFlanker", false);
+	Blackboard->SetValueAsBool("IsDefender", true);
+
+	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
+	if(TargetPlayer)
+	{
+		AMercenaryAIController* MercAIController = Cast<AMercenaryAIController>(AIController);
+		if(MercAIController)
+		{
+			MercAIController->SetFocus(TargetPlayer, EAIFocusPriority::Gameplay);
+		}
+	}
+	SetMovementState(true);
+}
+
 void AEnemyMercenary::ClearCombatRole()
 {
 	StopSuppressionFire();
 	StopShooting();
 
 	bIsSupressing = false;
+	bIsDefending = false;
+
 	AAIController* AIController = Cast<AAIController>(GetController());
 	if (!AIController || !AIController->GetBlackboardComponent())
 	{
@@ -549,6 +582,7 @@ void AEnemyMercenary::ClearCombatRole()
 
 	AIController->GetBlackboardComponent()->SetValueAsBool("IsSuppressor", false);
 	AIController->GetBlackboardComponent()->SetValueAsBool("IsFlanker", false);
+	AIController->GetBlackboardComponent()->SetValueAsBool("IsDefender", false);
 }
 
 FVector AEnemyMercenary::CalculateFlankPosition(AActor* ThreatActor)
