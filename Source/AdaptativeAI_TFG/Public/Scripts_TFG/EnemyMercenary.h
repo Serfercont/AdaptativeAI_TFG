@@ -239,6 +239,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI | Weapon")
 	FName ThirdPersonWeaponSocket = FName("weapon_r");
 
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Aim")
+	float CloseRangeThreshold = 800.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Aim")
+	float MediumRangeThreshold = 2500.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Aim")
+	float MaxEngagementRange = 6000.f;
+
+	float GetAimSpreadForDistance(float Distance) const;
+
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void StopShooting();
 

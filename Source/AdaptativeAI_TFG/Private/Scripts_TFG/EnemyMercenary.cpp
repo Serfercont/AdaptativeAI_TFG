@@ -124,7 +124,7 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 	}
 
 	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
-	if(DistanceToTarget > EffectiveRange)
+	if(DistanceToTarget > MaxEngagementRange)
 	{
 		return false;
 	}
@@ -147,6 +147,58 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 		UpdateBlackboardValues();
 	}
 	return true;
+}
+
+float AEnemyMercenary::GetAimSpreadForDistance(float Distance) const
+{
+	const float Far = 90.f;
+
+	switch (RoleType)
+	{
+	case EEnemyRole::Sniper:
+		if (Distance <= CloseRangeThreshold)
+		{
+			return 8.f;
+		}
+		if (Distance <= MediumRangeThreshold)
+		{
+			return 2.5f;
+		}
+		return 3.f;
+
+	case EEnemyRole::Rifle:
+		if (Distance <= CloseRangeThreshold)
+		{
+			return 2.f;
+		}
+		if (Distance <= MediumRangeThreshold)
+		{
+			return 5.f;
+		}
+		return 9.f;
+
+	case EEnemyRole::Shotgun:
+		if (Distance <= CloseRangeThreshold)
+		{
+			return 1.5f;
+		}
+		if (Distance <= MediumRangeThreshold)
+		{
+			return 12.f;
+		}
+		return Far;
+
+	default:
+		if(Distance <= CloseRangeThreshold)
+		{
+			return 2.f;
+		}
+		if(Distance <= MediumRangeThreshold)
+		{
+			return 5.f;
+		}
+		return 12.f;
+	}
 }
 
 void AEnemyMercenary::StopShooting()
@@ -288,7 +340,8 @@ void AEnemyMercenary::UpdateBlackboardValues()
 		float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
 		Blackboard->SetValueAsFloat("DistanceToPlayer", DistanceToPlayer);
 
-		float RangeThreshold = bWasInRange ? (EffectiveRange * 1.1f) : EffectiveRange;
+		float RangeForState =  MaxEngagementRange;
+		float RangeThreshold = bWasInRange ? (RangeForState * 1.1f) : RangeForState;
 		bNewInRange = DistanceToPlayer <= RangeThreshold;
 
 		FHitResult Hit;
@@ -340,7 +393,7 @@ void AEnemyMercenary::UpdateBlackboardValues()
 		}
 	}
 
-	Blackboard->SetValueAsFloat("ApproachRadius", EffectiveRange * 0.8f);
+	Blackboard->SetValueAsFloat("ApproachRadius", MediumRangeThreshold);
 
 }
 
@@ -671,11 +724,14 @@ FVector AEnemyMercenary::GetWeaponTargetLocation()
 	}
 
 	FVector AimSource = GetMesh()->GetSocketLocation(FName("head"));
-	FVector AimTarget = CurrentAimTarget->GetActorLocation()+ FVector(0.f,0.f,0.f);
+	FVector AimTarget = CurrentAimTarget->GetActorLocation();
 	AimTarget.Z += FMath::RandRange(MinAimOffsetZ, MaxAimOffsetZ);
 
+	float DistanceToTarget = FVector::Dist(GetActorLocation(), CurrentAimTarget->GetActorLocation());
+	float SpreadHalfAngle = GetAimSpreadForDistance(DistanceToTarget);
+
 	FVector AimDirection = (AimTarget - AimSource).GetSafeNormal();
-	AimDirection = UKismetMathLibrary::RandomUnitVectorInConeInDegrees(AimDirection, AimVarianceHalfAngle);
+	AimDirection = UKismetMathLibrary::RandomUnitVectorInConeInDegrees(AimDirection, SpreadHalfAngle);
 	AimTarget = AimSource + (AimDirection * AimRange);
 
 	FHitResult HitResult;
