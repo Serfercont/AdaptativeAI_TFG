@@ -435,7 +435,7 @@ void AEnemySquad::CoordinateFlankAndSupress()
 
 	for (int32 i = 0; i < ActiveMembers.Num(); i++)
 	{
-		if (i < NumFlankers)
+		if (i < NumFlankers && ActiveMembers[i]->RoleType != EEnemyRole::Sniper)
 		{
 			ActiveMembers[i]->AssignFlankerRole();
 		}

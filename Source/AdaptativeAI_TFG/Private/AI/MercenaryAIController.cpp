@@ -54,19 +54,30 @@ void AMercenaryAIController::HandlePerceptionUpdate(AActor* Actor, FAIStimulus S
 
 	if (Stimulus.WasSuccessfullySensed())
 	{
-		if(MercenaryPawn->MySquad)
+		GetWorldTimerManager().ClearTimer(LoseTargetTimerHandle);
+
+		if(MercenaryPawn->bIsInCombat)
 		{
-			if (MercenaryPawn->bIsInCombat)
-			{
-				MercenaryPawn->MySquad->SharePlayerLocation(Actor);
-			}
-			else
-			{
-				MercenaryPawn->MySquad->AlertAllMembers(Actor);
-			}
+			MercenaryPawn->MySquad->SharePlayerLocation(Actor);
 		}
+		else
+		{
+			MercenaryPawn->MySquad->AlertAllMembers(Actor);
+		}	
 	}
 	else
+	{
+		if (GetBlackboardComponent())
+		{
+			GetBlackboardComponent()->SetValueAsBool("IsPlayerVisible", false);
+		}
+			GetWorldTimerManager().SetTimer(LoseTargetTimerHandle, this, &AMercenaryAIController::OnLostPlayerConfirmed, LoseTargetGraceTime, false);
+	}
+}
+
+void AMercenaryAIController::OnLostPlayerConfirmed()
+{
+	if (MercenaryPawn)
 	{
 		MercenaryPawn->ExitCombat();
 	}

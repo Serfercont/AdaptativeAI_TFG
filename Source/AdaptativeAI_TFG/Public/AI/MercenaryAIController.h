@@ -21,6 +21,7 @@ protected:
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
 	virtual void HandlePerceptionUpdate(AActor* Actor, FAIStimulus Stimulus) override;
+	void OnLostPlayerConfirmed();
 
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
@@ -30,4 +31,7 @@ private:
 
 	UPROPERTY()
 	AEnemyMercenary* MercenaryPawn;
+
+	FTimerHandle LoseTargetTimerHandle;
+	float LoseTargetGraceTime = 5.0f;
 };

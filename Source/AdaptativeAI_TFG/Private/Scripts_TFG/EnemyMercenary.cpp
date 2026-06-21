@@ -162,9 +162,9 @@ float AEnemyMercenary::GetAimSpreadForDistance(float Distance) const
 		}
 		if (Distance <= MediumRangeThreshold)
 		{
-			return 2.5f;
+			return 1.5f;
 		}
-		return 3.f;
+		return 2.f;
 
 	case EEnemyRole::Rifle:
 		if (Distance <= CloseRangeThreshold)
@@ -307,6 +307,27 @@ void AEnemyMercenary::InitializeByRole()
 		if (EquippedWeapon)
 		{
 			AttachWeaponMeshes(EquippedWeapon);
+
+			switch (RoleType)
+			{
+			case EEnemyRole::Sniper:
+				EquippedWeapon->SetRefireRate(2.5f);
+				EquippedWeapon->SetFullAuto(false);
+				EquippedWeapon->SetMagazineSize(5);
+				break;
+			case EEnemyRole::Rifle:
+				EquippedWeapon->SetRefireRate(0.3f);
+				EquippedWeapon->SetFullAuto(true);
+				EquippedWeapon->SetMagazineSize(30);
+				break;
+			case EEnemyRole::Shotgun:
+				EquippedWeapon->SetRefireRate(1.0f);
+				EquippedWeapon->SetFullAuto(false);
+				EquippedWeapon->SetMagazineSize(8);
+				break;
+			default:
+				break;
+			}
 			UpdateBlackboardValues();
 		}
 	}
