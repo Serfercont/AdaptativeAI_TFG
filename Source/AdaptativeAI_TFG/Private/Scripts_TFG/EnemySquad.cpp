@@ -250,6 +250,14 @@ void AEnemySquad::CoordinateDefensiveRetreat()
 	{
 		Member->ClearCombatRole();
 		Member->AssignDefenderRole();
+
+		AAIController* AIController = Cast<AAIController>(Member->GetController());
+		if(AIController && AIController->GetBlackboardComponent())
+		{
+			bool bCheck = AIController->GetBlackboardComponent()->GetValueAsBool(FName("IsDefender"));
+
+			UE_LOG(LogTemp, Warning, TEXT("[Squad] %s es defensor: %s"), *Member->GetName(), bCheck ? TEXT("true") : TEXT("false"));
+		}
 	}
 
 	DefenseInitPosition = LastRecordedPlayerPosition;

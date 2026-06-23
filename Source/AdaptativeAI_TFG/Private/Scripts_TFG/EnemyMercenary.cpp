@@ -95,6 +95,7 @@ void AEnemyMercenary:: EnterCombat()
 
 	SetFacingMode(true);
 	SetMovementState(true);
+	UpdateChargeSpeed();
 }
 
 void AEnemyMercenary::ExitCombat()
@@ -121,6 +122,15 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 	if(bIsSupressing)
 	{
 		return true;
+	}
+
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if(AIController && AIController->GetBlackboardComponent())
+	{
+		if(AIController->GetBlackboardComponent()->GetValueAsBool("IsDefender") && !AIController->GetBlackboardComponent()->GetValueAsBool("HasClearLineOfSight"))
+		{
+			return false;
+		}
 	}
 
 	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
@@ -236,11 +246,11 @@ void AEnemyMercenary::InitializeByRole()
 		AmmoCount = 30.f;
 		break;
 	case EEnemyRole::Shotgun:
-		WalkSpeed = 350.f;
+		WalkSpeed = 450.f;
 		RunMultiplier = 1.5f;
-		TurnRate = 160.f;
-		EffectiveRange = 800.f;
-		Damage = 0.50f;
+		TurnRate = 200.f;
+		EffectiveRange = 300.f;
+		Damage = 0.70f;
 		Precision = 0.4f;
 		ReloadTime = 2.5f;
 		AmmoCount = 8.f;
@@ -361,7 +371,7 @@ void AEnemyMercenary::UpdateBlackboardValues()
 		float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
 		Blackboard->SetValueAsFloat("DistanceToPlayer", DistanceToPlayer);
 
-		float RangeForState =  MaxEngagementRange;
+		float RangeForState = (RoleType == EEnemyRole::Shotgun) ? EffectiveRange : MaxEngagementRange;
 		float RangeThreshold = bWasInRange ? (RangeForState * 1.1f) : RangeForState;
 		bNewInRange = DistanceToPlayer <= RangeThreshold;
 
@@ -413,9 +423,7 @@ void AEnemyMercenary::UpdateBlackboardValues()
 			MercAIController->ClearFocus(EAIFocusPriority::Gameplay);
 		}
 	}
-
-	Blackboard->SetValueAsFloat("ApproachRadius", MediumRangeThreshold);
-
+	UpdateChargeSpeed();
 }
 
 void AEnemyMercenary::EvaluateUtilityScores()
@@ -626,16 +634,17 @@ void AEnemyMercenary::AssignDefenderRole()
 	UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
 	Blackboard->SetValueAsBool("IsSuppressor", false);
 	Blackboard->SetValueAsBool("IsFlanker", false);
+
+	Blackboard->ClearValue("CoverLocation");
+
 	Blackboard->SetValueAsBool("IsDefender", true);
 
-	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
-	if(TargetPlayer)
+	UE_LOG(LogTemp, Warning, TEXT("[Merc %s] DEFENDER ROLE ASSIGNED"), *GetName());
+
+	AMercenaryAIController* MercAIController = Cast<AMercenaryAIController>(AIController);
+	if (MercAIController)
 	{
-		AMercenaryAIController* MercAIController = Cast<AMercenaryAIController>(AIController);
-		if(MercAIController)
-		{
-			MercAIController->SetFocus(TargetPlayer, EAIFocusPriority::Gameplay);
-		}
+		MercAIController->ClearFocus(EAIFocusPriority::Gameplay);
 	}
 	SetMovementState(true);
 }
@@ -684,6 +693,33 @@ FVector AEnemyMercenary::CalculateFlankPosition(AActor* ThreatActor)
 	}
 
 	return PlayerLocation + FlankDirection * 800.f;
+}
+
+void AEnemyMercenary::UpdateChargeSpeed()
+{
+	if(!bIsInCombat || RoleType != EEnemyRole::Shotgun)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+		return;
+	}
+
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if(!AIController || !AIController->GetBlackboardComponent())
+	{
+		return;
+	}
+
+	bool bInRange = AIController->GetBlackboardComponent()->GetValueAsBool("IsInRange");
+	bool bIsCharging = !bInRange && !bIsDefending && !bIsSupressing;
+
+	if (bIsCharging)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed * RunMultiplier;
+	}
+	else
+	{
+		GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	}
 }
 
 void AEnemyMercenary::RefreshSuppressionFocalPoint(FVector NewTarget)

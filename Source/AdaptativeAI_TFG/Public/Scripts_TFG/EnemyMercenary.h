@@ -202,6 +202,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
 	FVector CalculateFlankPosition(AActor* ThreatActor);
 
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void UpdateChargeSpeed();
+
 	UFUNCTION(BlueprintCallable)
 	void RefreshSuppressionFocalPoint(FVector NewTarget);
 
