@@ -11,6 +11,7 @@
 #include "Scripts_TFG/EnemySquad.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AI/MercenaryAIController.h"
+#include "AI/UtilityAIComponent.h"
 #include <Kismet/KismetMathLibrary.h>
 #include <NavigationSystem.h>
 
@@ -23,6 +24,8 @@ AEnemyMercenary::AEnemyMercenary()
 	GetCharacterMovement()->bUseControllerDesiredRotation = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 120.f, 0.f);
 	bUseControllerRotationYaw = false;
+
+	UtilityAI = CreateDefaultSubobject<UUtilityAIComponent>(TEXT("UtilityAIComponent"));
 }
 
 void AEnemyMercenary::BeginPlay()
@@ -139,7 +142,14 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 		return false;
 	}
 
-	if (AmmoCount <= 0.f)
+	if (EquippedWeapon)
+	{
+		if(EquippedWeapon->GetBulletCount() <= 0)
+		{
+			return false;
+		}
+	}
+	else if(AmmoCount <= 0.f)
 	{
 		return false;
 	}
@@ -424,6 +434,82 @@ void AEnemyMercenary::UpdateBlackboardValues()
 		}
 	}
 	UpdateChargeSpeed();
+	UpdateUtilityInputs();
+}
+
+void AEnemyMercenary::UpdateUtilityInputs()
+{
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if(!AIController || !AIController->GetBlackboardComponent())
+	{
+		return;
+	}
+
+	UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
+
+	UpdateReloadInput(Blackboard);
+	UpdateCoverInput(Blackboard);
+	UpdateAdaptativeProfile();
+}
+
+void AEnemyMercenary::UpdateReloadInput(UBlackboardComponent* Blackboard)
+{
+	const float MagSize = EquippedWeapon ? EquippedWeapon->GetMagazineSize() : 30.f;
+
+	float CurrentAmmo = EquippedWeapon ? (float)EquippedWeapon->GetBulletCount() : AmmoCount;
+	CurrentAmmo = FMath::Max(0.f, CurrentAmmo);
+
+	const float AmmoPct = (MagSize > 0.f) ? FMath::Clamp(CurrentAmmo / MagSize, 0.f, 1.f) : 0.f;
+	Blackboard->SetValueAsFloat("AmmoPct", AmmoPct);
+}
+
+void AEnemyMercenary::UpdateCoverInput(UBlackboardComponent* Blackboard)
+{
+	const float HealthPct = (MaxHealth > 0.f) ? FMath::Clamp(CurrentHealth / MaxHealth, 0.f, 1.f) : 0.f;
+	Blackboard->SetValueAsFloat("HealthPctInput", HealthPct);
+
+	const FVector MyLocation = GetActorLocation();
+
+	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
+	const float DistanceToPlayer = TargetPlayer ? FVector::Dist(MyLocation, TargetPlayer->GetActorLocation()) : 999999.f;
+
+	const FVector CoverLocation = Blackboard->GetValueAsVector("CoverLocation");
+	const bool bHasCover = !CoverLocation.IsNearlyZero();
+	const float DistanceToCover = bHasCover ? FVector::Dist(MyLocation, CoverLocation) : 999999.f;
+
+	const bool bCoverWorth = bHasCover && (DistanceToCover < DistanceToPlayer * CoverDistanceAdvantage);
+	Blackboard->SetValueAsBool("IsCoverWorth", bCoverWorth);
+}
+
+void AEnemyMercenary::UpdateAdaptativeProfile()
+{
+	if (!UtilityAI)
+	{
+		return;
+	}
+
+	UtilityAI->StressLevel = stressLevel;
+
+	if(!MySquad)
+	{
+		return;
+	}
+
+	switch (MySquad->CurrentPlayerStrategy)
+	{
+	case EPlayerStrategy::Agressive:
+		UtilityAI->SetAdaptativeProfile(EAdaptativeProfile::CounterAggresive);
+		break;
+	case EPlayerStrategy::Camping:
+		UtilityAI->SetAdaptativeProfile(EAdaptativeProfile::CounterCamper);
+		break;
+	case EPlayerStrategy::Silent:
+		UtilityAI->SetAdaptativeProfile(EAdaptativeProfile::CounterStealthy);
+		break;
+	default:
+		UtilityAI->SetAdaptativeProfile(EAdaptativeProfile::None);
+		break;
+	}
 }
 
 void AEnemyMercenary::EvaluateUtilityScores()
@@ -504,6 +590,11 @@ void AEnemyMercenary::StartReloadWeapon()
 		ReloadTimerHandle,
 		[this]()
 		{
+			if (EquippedWeapon)
+			{
+				EquippedWeapon->Reload();
+			}
+
 			switch (RoleType)
 			{
 			case EEnemyRole::Sniper:   AmmoCount = 5.f;  break;

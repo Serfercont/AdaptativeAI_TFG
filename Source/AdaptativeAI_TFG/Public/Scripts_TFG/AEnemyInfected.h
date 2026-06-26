@@ -6,6 +6,8 @@
 #include "Scripts_TFG/EnemyBase.h"
 #include "AEnemyInfected.generated.h"
 
+class UUtilityAIComponent;
+
 /**
  * 
  */
@@ -17,8 +19,15 @@ class ADAPTATIVEAI_TFG_API AAEnemyInfected : public AEnemyBase
 public:
 	AAEnemyInfected();
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI | Utility")
+	UUtilityAIComponent* UtilityAI;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AI | Utility")
+	float StressLevel = 0.0f;
+
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 
 public:
 
@@ -84,11 +93,17 @@ public:
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
-	//Utility AI
-	UFUNCTION()
-	void EvaluateUtilityScores();
-
 	void UpdateBlackboardValues();
+
+	void UpdateUtilityInputs();
+	void UpdateStressLevel(float DeltaTime);
+
+private:
+	void UpdateFleeInput(class UBlackboardComponent* BlackboardComp);
+	void UpdateFinalJumpInput(class UBlackboardComponent* BlackboardComp);
+	void UpdateThrowInput(class UBlackboardComponent* BlackboardComp);
+
+public:
 
 	FTimerHandle UtilityTimerHandle;
 

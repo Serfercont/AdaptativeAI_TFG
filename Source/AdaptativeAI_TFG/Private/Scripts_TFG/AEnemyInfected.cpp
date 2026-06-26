@@ -8,6 +8,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "NavigationSystem.h"
 #include "DrawDebugHelpers.h"
+#include "AI/UtilityAIComponent.h"
 
 TArray<AAEnemyInfected::FDamageRecord> AAEnemyInfected::GlobalDamageRecords;
 AAEnemyInfected::AAEnemyInfected()
@@ -20,6 +21,8 @@ AAEnemyInfected::AAEnemyInfected()
 	Damage = 20.f;
 	AttackRange = 150.f;
 	AttackCooldown = 1.5f;
+
+	UtilityAI = CreateDefaultSubobject<UUtilityAIComponent>(TEXT("UtilityAIComponent"));
 }
 
 void AAEnemyInfected::BeginPlay()
@@ -27,7 +30,21 @@ void AAEnemyInfected::BeginPlay()
 	Super::BeginPlay();
 
 	UpdateBlackboardValues();
-	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this, &AAEnemyInfected::EvaluateUtilityScores, 0.5f, true);
+	UpdateUtilityInputs();
+
+	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this,&AAEnemyInfected::UpdateUtilityInputs, 0.5f, true);
+}
+
+void AAEnemyInfected::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	
+	UpdateStressLevel(DeltaTime);
+
+	if (UtilityAI)
+	{
+		UtilityAI->StressLevel=StressLevel;
+	}
 }
 
 void AAEnemyInfected::RecordGlobalDamage(float DamageAmount, float CurrentTime)
@@ -71,36 +88,25 @@ float AAEnemyInfected::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 	return ActualDamage;
 }
 
-void AAEnemyInfected::EvaluateUtilityScores()
+void AAEnemyInfected::UpdateUtilityInputs()
 {
-	//First utility ai implementation , calculating the flee score based on health and nearby allies
 	AAIController* AIController = Cast<AAIController>(GetController());
-
-	if (!AIController || !AIController->GetBlackboardComponent())
+	if(!AIController || !AIController->GetBlackboardComponent())
 	{
 		return;
 	}
+	UpdateBlackboardValues();
 
 	UBlackboardComponent* BlackboardComp = AIController->GetBlackboardComponent();
 
-	float HealthPct = CurrentHealth / MaxHealth;
-	int32 NearbyAllies = BlackboardComp->GetValueAsInt(TEXT("NearbyAllies"));
+	UpdateFleeInput(BlackboardComp);
+	UpdateFinalJumpInput(BlackboardComp);
+	UpdateThrowInput(BlackboardComp);
 
-	//flee curve, inverse exponential
-	float FleeCurveValue = 0.0f;
-
-	if (HealthPct < 0.3f)
+	if (UtilityAI)
 	{
-		FleeCurveValue = FMath::Pow(1.0f - HealthPct, 2.0f);
+		UtilityAI->StressLevel=StressLevel;
 	}
-
-	float FleeBaseWeight = 0.8f;
-	float AdapatativeMultiplier = 1.0f;
-
-	float FleeUtilityFinal = FleeBaseWeight * FleeCurveValue * AdapatativeMultiplier;
-	FleeUtilityFinal = FMath::Clamp(FleeUtilityFinal, 0.0f, 1.0f);
-
-	UpdateBlackboardValues();
 }
 
 void AAEnemyInfected::UpdateBlackboardValues()
@@ -157,7 +163,7 @@ void AAEnemyInfected::UpdateBlackboardValues()
 			if (CurrentTime > LastDodgeTime + 2.f)
 			{
 				bIsDodging = true;
-				DodgeEndTime = CurrentTime + 15.f;
+				DodgeEndTime = CurrentTime + 10.f;
 			}
 		}
 
@@ -176,6 +182,59 @@ void AAEnemyInfected::UpdateBlackboardValues()
 			 BlackboardComp->SetValueAsBool("IsFuryMode", true);
 		 }
 	}
+}
+
+void AAEnemyInfected::UpdateStressLevel(float DeltaTime)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float RecentDamage = GetRecentGlobalDamage(Now, 3.f);
+
+	const float StressTarget = FMath::Clamp(RecentDamage / 150.f, 0.f, 1.f);
+
+	if(StressTarget > StressLevel)
+	{
+		StressLevel = FMath::FInterpTo(StressLevel, StressTarget, DeltaTime, 4.f);
+	}
+	else
+	{
+		StressLevel = FMath::FInterpTo(StressLevel, StressTarget, DeltaTime, 0.5f);
+	}
+
+	StressLevel = FMath::Clamp(StressLevel, 0.f, 1.f);
+}
+
+void AAEnemyInfected::UpdateFleeInput(UBlackboardComponent* BlackboardComp)
+{
+	const float HealthPct = (MaxHealth > 0.f) ? CurrentHealth / MaxHealth : 0.f;
+
+	const int32 NearbyAllies = BlackboardComp->GetValueAsInt("NearbyAllies");
+	const float LowHealthFactor = 1.f - HealthPct;
+	const float AloneFactor = (NearbyAllies <= 0) ? 1.f : 0.f;
+	const float FleeInput = LowHealthFactor * AloneFactor;
+
+	BlackboardComp->SetValueAsFloat("FleeInput", FleeInput);
+}
+
+void AAEnemyInfected::UpdateFinalJumpInput(UBlackboardComponent* BlackboardComp)
+{
+	const float HealthPct = (MaxHealth > 0.f) ? CurrentHealth / MaxHealth : 0.f;
+	BlackboardComp->SetValueAsFloat("FinalJumpInput", HealthPct);
+}
+
+void AAEnemyInfected::UpdateThrowInput(UBlackboardComponent* BlackboardComp)
+{
+	AActor* TargetActor = Cast<AActor>(BlackboardComp->GetValueAsObject("TargetActor"));
+	float ThrowInput = 0.f;
+	if (TargetActor)
+	{
+		const float HeighDiff = TargetActor->GetActorLocation().Z - GetActorLocation().Z;
+		const float Distance2D = FVector::Dist2D(TargetActor->GetActorLocation(), GetActorLocation());
+		const float HeightFactor = FMath::Clamp(HeighDiff / 200.f, 0.f, 1.f);
+
+		const bool bInThrowRange = (Distance2D > MinThrowDistance) && (Distance2D < MaxThrowDistance);
+		ThrowInput = (bInThrowRange) ? HeightFactor : 0.f;
+	}
+	BlackboardComp->SetValueAsFloat("ThrowInput", ThrowInput);
 }
 
 void AAEnemyInfected::PerformLaCrida(AActor* TargetPlayer)

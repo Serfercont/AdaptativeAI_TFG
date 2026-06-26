@@ -7,6 +7,8 @@
 #include "ShooterWeaponHolder.h"
 #include "EnemyMercenary.generated.h"
 
+class UUtilityAIComponent;
+
 /**
  * 
  */
@@ -173,8 +175,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void SetFacingMode(bool bFacePlayer);
 
-
-	// Reload the weapon when the amo count is low or after a certain number of shots
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void StartReloadWeapon();
 
@@ -204,6 +204,17 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void UpdateChargeSpeed();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI | Utility")
+	UUtilityAIComponent* UtilityAI;
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
+	void UpdateUtilityInputs();
+
+	private: 
+		void UpdateReloadInput(class UBlackboardComponent* Blackboard);
+		void UpdateCoverInput(class UBlackboardComponent* Blackboard);
+		void UpdateAdaptativeProfile();
 
 	UFUNCTION(BlueprintCallable)
 	void RefreshSuppressionFocalPoint(FVector NewTarget);
@@ -250,6 +261,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "AI | Aim")
 	float MaxEngagementRange = 6000.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Tactics")
+	float CoverDistanceAdvantage = 1.0f;
 
 	float GetAimSpreadForDistance(float Distance) const;
 

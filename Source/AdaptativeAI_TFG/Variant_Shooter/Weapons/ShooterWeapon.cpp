@@ -130,6 +130,13 @@ void AShooterWeapon::Fire()
 	{
 		return;
 	}
+
+	if(CurrentBullets <= 0)
+	{
+		StopFiring();
+		WeaponOwner->UpdateWeaponHUD(CurrentBullets, MagazineSize);
+		return;
+	}
 	
 	// fire a projectile at the target
 	FireProjectile(WeaponOwner->GetWeaponTargetLocation());
