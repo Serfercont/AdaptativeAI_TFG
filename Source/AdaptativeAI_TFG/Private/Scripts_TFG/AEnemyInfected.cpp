@@ -9,6 +9,8 @@
 #include "NavigationSystem.h"
 #include "DrawDebugHelpers.h"
 #include "AI/UtilityAIComponent.h"
+#include "ShooterProjectile.h"
+#include "Components/CapsuleComponent.h"
 
 TArray<AAEnemyInfected::FDamageRecord> AAEnemyInfected::GlobalDamageRecords;
 AAEnemyInfected::AAEnemyInfected()
@@ -28,11 +30,78 @@ AAEnemyInfected::AAEnemyInfected()
 void AAEnemyInfected::BeginPlay()
 {
 	Super::BeginPlay();
+	ConfigureUtilityActions();
 
 	UpdateBlackboardValues();
 	UpdateUtilityInputs();
 
 	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this,&AAEnemyInfected::UpdateUtilityInputs, 0.5f, true);
+}
+
+void AAEnemyInfected::ConfigureUtilityActions()
+{
+	if(!UtilityAI)
+	{
+		return;
+	}
+
+	UtilityAI->EvaluationInterval = 0.5f;
+	UtilityAI->ActivationThreshold = 0.35f;
+	UtilityAI->StressSaturationLevel = 1.0f;
+
+	UtilityAI->Actions.Empty();
+
+	// Action: Flee
+	{
+		FUtilityAction Flee;
+		Flee.ActionName				= "Flee";
+		Flee.InputKey				= "FleeInput";
+		Flee.CurveType				= EUtilityCurveType::Exponential;
+		Flee.CurveParamA			= 2.0f;
+		Flee.CurveParamB			= 0.0f;
+		Flee.BaseWeight				= 0.8f;
+		Flee.OutputScoreKey			= "FleeScore";
+		Flee.OutputBoolKey			= "ShouldFlee";
+		Flee.bInputIsNormalized		= true;
+		Flee.inputMax				= 1.0f;
+
+		UtilityAI->Actions.Add(Flee);
+	}
+
+	//Action: FinalJump
+	{
+		FUtilityAction FinalJump;
+		FinalJump.ActionName			= "FinalJump";
+		FinalJump.InputKey				= "FinalJumpInput";
+		FinalJump.CurveType				= EUtilityCurveType::Inverse;
+		FinalJump.CurveParamA			= 1.0f;
+		FinalJump.CurveParamB			= 0.0f;
+		FinalJump.BaseWeight			= 0.7f;
+		FinalJump.OutputScoreKey		= "FinalJumpScore";
+		FinalJump.OutputBoolKey			= "ShouldFinalJump";
+		FinalJump.bInputIsNormalized	= true;
+		FinalJump.inputMax				= 1.0f;
+
+		UtilityAI->Actions.Add(FinalJump);
+	}
+
+	//Action: Throw
+	{
+		FUtilityAction Throw;
+		Throw.ActionName			= "ThrowStone";
+		Throw.InputKey				= "ThrowInput";
+		Throw.CurveType				= EUtilityCurveType::Logistic;
+		Throw.CurveParamA			= 8.0f;
+		Throw.CurveParamB			= 0.4f;
+		Throw.BaseWeight			= 0.7f;
+		Throw.OutputScoreKey		= "ThrowScore";
+		Throw.OutputBoolKey			= "ShouldThrow";
+		Throw.bInputIsNormalized	= true;
+		Throw.inputMax				= 1.0f;
+
+		UtilityAI->Actions.Add(Throw);
+	}
+
 }
 
 void AAEnemyInfected::Tick(float DeltaTime)
@@ -231,7 +300,8 @@ void AAEnemyInfected::UpdateThrowInput(UBlackboardComponent* BlackboardComp)
 		const float Distance2D = FVector::Dist2D(TargetActor->GetActorLocation(), GetActorLocation());
 		const float HeightFactor = FMath::Clamp(HeighDiff / 200.f, 0.f, 1.f);
 
-		const bool bInThrowRange = (Distance2D > MinThrowDistance) && (Distance2D < MaxThrowDistance);
+		const bool bPlayerAbove = HeighDiff > 200.f;
+		const bool bInThrowRange = (Distance2D > MinThrowDistance) && (bPlayerAbove || Distance2D < MaxThrowDistance);
 		ThrowInput = (bInThrowRange) ? HeightFactor : 0.f;
 	}
 	BlackboardComp->SetValueAsFloat("ThrowInput", ThrowInput);
@@ -270,27 +340,42 @@ void AAEnemyInfected::ThrowObject(AActor* TargetPlayer)
 		return;
 	}
 
-	FVector SpawnLocation = GetActorLocation() + FVector(0, 0, 0);
+	FVector SpawnLocation = GetActorLocation() + FVector(0.f, 0.f, 80.0f);
 	FVector EndLocation = TargetPlayer->GetActorLocation();
 	FVector LaunchVelocity;
 
-	bool bSuccess = UGameplayStatics::SuggestProjectileVelocity_CustomArc(this, LaunchVelocity, SpawnLocation, EndLocation, 0.f, 0.5f);
+	bool bSuccess = UGameplayStatics::SuggestProjectileVelocity_CustomArc(this, LaunchVelocity, SpawnLocation, EndLocation, 0.f, 0.8f);
 
 	if (bSuccess)
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
+		SpawnParams.Instigator = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 		
-		AActor* Projectile = GetWorld()->SpawnActor<AActor>(StoneProjectileClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+		AShooterProjectile* Projectile = GetWorld()->SpawnActor<AShooterProjectile>(StoneProjectileClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
 
 		if (Projectile)
 		{
-			UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Projectile->GetComponentByClass(UStaticMeshComponent::StaticClass()));
-			if (MeshComp)
+			if (UPrimitiveComponent* ProjRoot = Cast<UPrimitiveComponent>(Projectile->GetRootComponent()))
 			{
-				MeshComp->SetSimulatePhysics(true);
-				MeshComp->SetPhysicsLinearVelocity(LaunchVelocity);
+				ProjRoot->IgnoreActorWhenMoving(this, true);
+				ProjRoot->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			}
+			Projectile->LaunchWithVelocity(LaunchVelocity);
+
+			FTimerHandle ReenableTimerHandle;
+			TWeakObjectPtr<AShooterProjectile> WeakProjectile = Projectile;
+			GetWorld()->GetTimerManager().SetTimer(ReenableTimerHandle, [WeakProjectile]()
+			{
+				if (WeakProjectile.IsValid())
+				{
+					if (UPrimitiveComponent* ProjRoot = Cast<UPrimitiveComponent>(WeakProjectile->GetRootComponent()))
+					{
+						ProjRoot->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+					}
+				}
+			}, 1.0f, false);
 		}
 	}
 }

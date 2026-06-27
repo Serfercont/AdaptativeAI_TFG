@@ -32,6 +32,8 @@ void AEnemyMercenary::BeginPlay()
 {
 	Super::BeginPlay();
 
+	ConfigureUtilityActions();
+
 	AActor* FoundManager = UGameplayStatics::GetActorOfClass(GetWorld(), ASquadManager::StaticClass());
 
 	if(FoundManager)
@@ -137,6 +139,7 @@ bool AEnemyMercenary::PerformShoot(AActor* Target)
 	}
 
 	float DistanceToTarget = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+	const float ShootRange = (RoleType == EEnemyRole::Sniper) ? EffectiveRange : MaxEngagementRange;
 	if(DistanceToTarget > MaxEngagementRange)
 	{
 		return false;
@@ -239,7 +242,7 @@ void AEnemyMercenary::InitializeByRole()
 		WalkSpeed = 250.f;
 		RunMultiplier = 1.3f;
 		TurnRate = 90.f;
-		EffectiveRange = 5000.f;
+		EffectiveRange = 8000.f;
 		Damage = 0.80f;
 		Precision = 0.8f;
 		ReloadTime = 3.5f;
@@ -371,6 +374,16 @@ void AEnemyMercenary::UpdateBlackboardValues()
 
 	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
 
+	if(RoleType == EEnemyRole::Sniper && bIsInCombat &&!TargetPlayer)
+	{
+		APlayerController* PlayerController = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+		if(PlayerController && PlayerController->GetPawn())
+		{
+			TargetPlayer = PlayerController->GetPawn();
+			Blackboard->SetValueAsObject(FName("TargetActor"), TargetPlayer);
+		}
+	}
+
 	bool bWasInRange = Blackboard->GetValueAsBool("IsInRange");
 
 	bool bNewInRange = false;
@@ -381,18 +394,18 @@ void AEnemyMercenary::UpdateBlackboardValues()
 		float DistanceToPlayer = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
 		Blackboard->SetValueAsFloat("DistanceToPlayer", DistanceToPlayer);
 
-		float RangeForState = (RoleType == EEnemyRole::Shotgun) ? EffectiveRange : MaxEngagementRange;
+		float RangeForState = MaxEngagementRange;
+		if(RoleType == EEnemyRole::Shotgun || RoleType == EEnemyRole::Sniper)
+		{
+			RangeForState = EffectiveRange;
+		}
 		float RangeThreshold = bWasInRange ? (RangeForState * 1.1f) : RangeForState;
 		bNewInRange = DistanceToPlayer <= RangeThreshold;
 
 		FHitResult Hit;
 		FCollisionQueryParams Params;
 		Params.AddIgnoredActor(this);
-		bool bTraceHit = GetWorld()->LineTraceSingleByChannel(
-			Hit,
-			GetActorLocation() + FVector(0, 0, 60),
-			TargetPlayer->GetActorLocation() + FVector(0, 0, 60),
-			ECC_Visibility, Params);
+		bool bTraceHit = GetWorld()->LineTraceSingleByChannel(Hit, GetActorLocation() + FVector(0, 0, 60), TargetPlayer->GetActorLocation() + FVector(0, 0, 60), ECC_Visibility, Params);
 		bNewHasSight = !bTraceHit || (Hit.GetActor() == TargetPlayer);
 
 		if (bIsInCombat && !bIsSupressing)
@@ -433,8 +446,69 @@ void AEnemyMercenary::UpdateBlackboardValues()
 			MercAIController->ClearFocus(EAIFocusPriority::Gameplay);
 		}
 	}
+
+	if (RoleType == EEnemyRole::Sniper && Blackboard->GetValueAsBool("ShouldCover"))
+	{
+		Blackboard->SetValueAsBool("SniperInPosition", false);
+	}
 	UpdateChargeSpeed();
 	UpdateUtilityInputs();
+}
+
+void AEnemyMercenary::ConfigureUtilityActions()
+{
+	if(!IsValid(UtilityAI))
+	{
+		return;
+	}
+
+	UtilityAI->EvaluationInterval = 0.5f;
+	UtilityAI->ActivationThreshold = 0.5f;
+	UtilityAI->StressSaturationLevel = 1.0f;
+
+	UtilityAI->Actions.Empty();
+
+	// Action: Reload
+	{
+		FUtilityAction Reload;
+		Reload.ActionName			= "Reload";
+		Reload.InputKey				= "AmmoPct";
+		Reload.CurveType			= EUtilityCurveType::InverseExponential;
+		Reload.CurveParamA			= 8.0f;
+		Reload.CurveParamB			= 0.0f;
+		Reload.BaseWeight			= 0.7f;
+		Reload.MultCounterAggresive	= 1.2f;
+		Reload.MultCounterStealthy	= 1.0f;
+		Reload.MultCounterCamper	= 0.9f;
+		Reload.OutputScoreKey		= "ReloadScore";
+		Reload.OutputBoolKey		= "ShouldReload";
+		Reload.bInputIsNormalized	= true;
+		Reload.inputMax				= 1.0f;
+
+		UtilityAI->Actions.Add(Reload);
+	}
+
+	//Action Cover
+	{
+		FUtilityAction Cover;
+		Cover.ActionName			= "Cover";
+		Cover.InputKey				= "HealthPctInput";
+		Cover.CurveType				= EUtilityCurveType::Inverse;
+		Cover.CurveParamA			= 1.0f;
+		Cover.CurveParamB			= 1.0f;
+		Cover.BaseWeight			= 0.75f;
+		Cover.MultCounterAggresive	= 1.5f;
+		Cover.MultCounterStealthy	= 1.0f;
+		Cover.MultCounterCamper		= 0.8f;
+		Cover.OutputScoreKey		= "CoverScore";
+		Cover.OutputBoolKey			= "ShouldCover";
+		Cover.bInputIsNormalized	= true;
+		Cover.inputMax				= 1.0f;
+
+		UtilityAI->Actions.Add(Cover);
+	}
+
+	UtilityAI->SetEvaluationEnabled(true);
 }
 
 void AEnemyMercenary::UpdateUtilityInputs()
@@ -461,6 +535,17 @@ void AEnemyMercenary::UpdateReloadInput(UBlackboardComponent* Blackboard)
 
 	const float AmmoPct = (MagSize > 0.f) ? FMath::Clamp(CurrentAmmo / MagSize, 0.f, 1.f) : 0.f;
 	Blackboard->SetValueAsFloat("AmmoPct", AmmoPct);
+
+	if (RoleType == EEnemyRole::Shotgun && bIsInCombat)
+	{
+		const bool bWantsReload = Blackboard->GetValueAsBool("ShouldReload");
+		const bool bAlreadyReoad = Blackboard->GetValueAsBool("IsReloading");
+
+		if(bWantsReload && !bAlreadyReoad)
+		{
+			StartReloadWeapon();
+		}
+	}
 }
 
 void AEnemyMercenary::UpdateCoverInput(UBlackboardComponent* Blackboard)
@@ -483,14 +568,14 @@ void AEnemyMercenary::UpdateCoverInput(UBlackboardComponent* Blackboard)
 
 void AEnemyMercenary::UpdateAdaptativeProfile()
 {
-	if (!UtilityAI)
+	if (!IsValid(UtilityAI))
 	{
 		return;
 	}
 
 	UtilityAI->StressLevel = stressLevel;
 
-	if(!MySquad)
+	if(!IsValid(MySquad))
 	{
 		return;
 	}
@@ -533,14 +618,21 @@ float AEnemyMercenary::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 
 	CurrentHealth -= ActualDamage;
 	CurrentHealth = FMath::Clamp(CurrentHealth, 0.f, MaxHealth);
-	UpdateBlackboardValues();
 
 	if(CurrentHealth <= 0.f)
 	{
 		GetWorldTimerManager().ClearTimer(UtilityTimerHandle);
 		GetWorldTimerManager().ClearTimer(ReloadTimerHandle);
+		if (IsValid(UtilityAI))
+		{
+			UtilityAI->SetEvaluationEnabled(false);
+		}
+		SetActorTickEnabled(false);
 		Destroy();
+		return ActualDamage;
 	}
+
+	UpdateBlackboardValues();
 
 	return ActualDamage;
 }

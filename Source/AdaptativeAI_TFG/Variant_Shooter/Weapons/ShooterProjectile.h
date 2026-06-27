@@ -80,6 +80,9 @@ public:
 	/** Constructor */
 	AShooterProjectile();
 
+	UFUNCTION(BlueprintCallable, Category = "Projectile")
+	void LaunchWithVelocity(const FVector& Velocity);
+
 protected:
 	
 	/** Gameplay initialization */

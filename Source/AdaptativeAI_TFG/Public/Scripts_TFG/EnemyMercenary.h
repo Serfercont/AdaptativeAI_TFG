@@ -215,6 +215,7 @@ public:
 		void UpdateReloadInput(class UBlackboardComponent* Blackboard);
 		void UpdateCoverInput(class UBlackboardComponent* Blackboard);
 		void UpdateAdaptativeProfile();
+		void ConfigureUtilityActions();
 
 	UFUNCTION(BlueprintCallable)
 	void RefreshSuppressionFocalPoint(FVector NewTarget);

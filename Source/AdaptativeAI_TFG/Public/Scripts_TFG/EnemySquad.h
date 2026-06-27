@@ -48,10 +48,10 @@ protected:
 	float CampingMovementThreshold = 300.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Squad")
-	float KillWindowDuration = 12.0f;
+	float KillWindowDuration = 15.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Squad")
-	int32 agressiveKillThreshold = 2;
+	int32 agressiveKillThreshold = 4;
 
 
 	bool ResolvePlayerTarget(FVector& OutPlayerPosition, AActor*& OutTargetPlayer);

@@ -3,8 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ShooterProjectile.h"
 #include "Scripts_TFG/EnemyBase.h"
 #include "AEnemyInfected.generated.h"
+
 
 class UUtilityAIComponent;
 
@@ -80,7 +82,7 @@ public:
 	float ThrowPrecision;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Throw")
-	TSubclassOf<AActor> StoneProjectileClass;
+	TSubclassOf<AShooterProjectile> StoneProjectileClass;
 
 	UPROPERTY(EditAnywhere, Category = "AI | Utility")
 	float SoundInvestigatePriority;
@@ -102,6 +104,7 @@ private:
 	void UpdateFleeInput(class UBlackboardComponent* BlackboardComp);
 	void UpdateFinalJumpInput(class UBlackboardComponent* BlackboardComp);
 	void UpdateThrowInput(class UBlackboardComponent* BlackboardComp);
+	void ConfigureUtilityActions();
 
 public:
 

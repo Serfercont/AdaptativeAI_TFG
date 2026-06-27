@@ -229,7 +229,7 @@ void AEnemySquad::CoordinateDefensiveRetreat()
 	TArray<AEnemyMercenary*> ActiveMembers;
 	for(AEnemyMercenary* Member : SquadMembers)
 	{
-		if(Member && Member->CurrentHealth > 0)
+		if(Member && Member->CurrentHealth > 0 && Member->RoleType != EEnemyRole::Sniper)
 		{
 			AAIController* AIC = Cast<AAIController>(Member->GetController());
 			if(AIC && AIC->GetBlackboardComponent() && AIC->GetBlackboardComponent()->GetValueAsObject(FName("TargetActor")))
@@ -413,7 +413,7 @@ void AEnemySquad::CoordinateFlankAndSupress()
 	TArray<AEnemyMercenary*> ActiveMembers;
 	for (AEnemyMercenary* Member : SquadMembers)
 	{
-		if (Member && Member->CurrentHealth > 0)
+		if (Member && Member->CurrentHealth > 0 && Member->RoleType != EEnemyRole::Sniper)
 		{
 			AAIController* AIC = Cast<AAIController>(Member->GetController());
 			if (AIC && AIC->GetBlackboardComponent() && AIC->GetBlackboardComponent()->GetValueAsObject(FName("TargetActor")))

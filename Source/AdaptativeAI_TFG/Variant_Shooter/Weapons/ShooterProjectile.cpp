@@ -3,6 +3,8 @@
 
 #include "ShooterProjectile.h"
 #include "Components/SphereComponent.h"
+#include "Scripts_TFG/AEnemyInfected.h"
+#include "Scripts_TFG/EnemyMercenary.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
@@ -36,6 +38,18 @@ AShooterProjectile::AShooterProjectile()
 	HitDamageType = UDamageType::StaticClass();
 }
 
+void AShooterProjectile::LaunchWithVelocity(const FVector& InVelocity)
+{
+	if(ProjectileMovement)
+	{
+		ProjectileMovement->MaxSpeed = FMath::Max(ProjectileMovement->MaxSpeed, InVelocity.Size() * 1.1f);
+		ProjectileMovement->Velocity = InVelocity;
+		ProjectileMovement->ProjectileGravityScale = 1.0f;
+		ProjectileMovement->Activate();
+		ProjectileMovement->SetUpdatedComponent(RootComponent);
+	}
+}
+
 void AShooterProjectile::BeginPlay()
 {
 	Super::BeginPlay();
@@ -54,6 +68,10 @@ void AShooterProjectile::EndPlay(EEndPlayReason::Type EndPlayReason)
 
 void AShooterProjectile::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
+	if(Other == GetOwner()|| Other == GetInstigator())
+	{
+		return;
+	}
 	// ignore if we've already hit something else
 	if (bHit)
 	{
@@ -140,15 +158,11 @@ void AShooterProjectile::ExplosionCheck(const FVector& ExplosionCenter)
 
 void AShooterProjectile::ProcessHit(AActor* HitActor, UPrimitiveComponent* HitComp, const FVector& HitLocation, const FVector& HitDirection)
 {
-	// have we hit a character?
 	if (ACharacter* HitCharacter = Cast<ACharacter>(HitActor))
 	{
-		// ignore the owner of this projectile
 		if (HitCharacter != GetOwner() || bDamageOwner)
 		{
 			AController* InstigatorController = GetInstigator() ? GetInstigator()->GetController() : nullptr;
-
-			// apply damage to the character
 			UGameplayStatics::ApplyDamage(HitCharacter, HitDamage, InstigatorController, this, HitDamageType);
 		}
 	}
