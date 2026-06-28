@@ -23,9 +23,14 @@ protected:
 	virtual void HandlePerceptionUpdate(AActor* Actor, FAIStimulus Stimulus) override;
 	void OnLostPlayerConfirmed();
 
+	void OnFullyLostPlayer();
+
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
 	UBehaviorTree* MercenaryBehaviorTree;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI")
+	float FullForgetTime = 8.0f;
 
 private:
 
@@ -34,4 +39,6 @@ private:
 
 	FTimerHandle LoseTargetTimerHandle;
 	float LoseTargetGraceTime = 5.0f;
+
+	FTimerHandle FullForgetTimerHandle;
 };

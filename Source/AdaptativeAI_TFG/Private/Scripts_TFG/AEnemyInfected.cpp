@@ -417,12 +417,6 @@ FVector AAEnemyInfected::CalculateDodgeLocation(AActor* TargetPlayer)
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
 	FNavLocation NavLocation;
 
-	if (NavSys && NavSys->ProjectPointToNavigation(DodgeLocation, NavLocation, FVector(500.f, 500.f, 500.f)))
-	{
-		DrawDebugSphere(GetWorld(), NavLocation.Location, 50.f, 12, FColor::Red, false, 2.f);
-		return NavLocation.Location;
-	}
-
 	return PlayerLocation;
 }
 
@@ -482,13 +476,6 @@ void AAEnemyInfected::FinalAttackJump(AActor* TargetPlayer)
 
 		PredictedOffset = PredictedOffset.GetClampedToMaxSize(400.f);
 		EndLocation = PlayerLocation + PredictedOffset;
-
-		if (GEngine)
-		{
-			DrawDebugSphere(GetWorld(), EndLocation, 30.f, 12, FColor::Orange, false, 2.f);
-			DrawDebugLine(GetWorld(), PlayerLocation, EndLocation, FColor::Orange, false, 2.f, 0, 2.f);
-		}
-
 	}
 
 	//Jump Calculation

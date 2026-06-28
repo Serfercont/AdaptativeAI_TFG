@@ -355,6 +355,7 @@ void AEnemyMercenary::InitializeByRole()
 		}
 	}
 	UpdateBlackboardValues();
+	ConfigureUtilityActions();
 }
 
 void AEnemyMercenary::UpdateBlackboardValues()
@@ -462,12 +463,116 @@ void AEnemyMercenary::ConfigureUtilityActions()
 		return;
 	}
 
+	switch (RoleType)
+	{
+	case EEnemyRole::Rifle:
+		ConfigureRifleUtilityActions();
+		break;
+	default:
+		ConfigureDefaultUtilityActions();
+		break;
+	}
+
+	UtilityAI->SetEvaluationEnabled(true);
+}
+
+void AEnemyMercenary::ConfigureRifleUtilityActions()
+{
+	UtilityAI->EvaluationInterval = 0.5f;
+	UtilityAI->ActivationThreshold = 0.05f;
+	UtilityAI->StressSaturationLevel = 1.0f;
+
+
+	UtilityAI->Actions.Empty();
+
+	// Action: Reload
+	{
+		FUtilityAction Reload;
+		Reload.ActionName = "Reload";
+		Reload.InputKey = "AmmoPct";
+		Reload.CurveType = EUtilityCurveType::InverseExponential;
+		Reload.CurveParamA = 8.0f;
+		Reload.CurveParamB = 0.0f;
+		Reload.BaseWeight = 0.85f;
+		Reload.MultCounterAggresive = 1.15f;
+		Reload.MultCounterStealthy = 1.0f;
+		Reload.MultCounterCamper = 0.9f;
+		Reload.OutputScoreKey = "ReloadScore";
+		Reload.OutputBoolKey = "ShouldReload";
+		Reload.bInputIsNormalized = true;
+		Reload.inputMax = 1.0f;
+
+		UtilityAI->Actions.Add(Reload);
+	}
+
+	//Action Cover
+	{
+		FUtilityAction Cover;
+		Cover.ActionName = "Cover";
+		Cover.InputKey = "HealthPctInput";
+		Cover.CurveType = EUtilityCurveType::Inverse;
+		Cover.CurveParamA = 1.0f;
+		Cover.CurveParamB = 1.0f;
+		Cover.BaseWeight = 0.7f;
+		Cover.MultCounterAggresive = 1.6f;
+		Cover.MultCounterStealthy = 1.0f;
+		Cover.MultCounterCamper = 0.55f;
+		Cover.OutputScoreKey = "CoverScore";
+		Cover.OutputBoolKey = "ShouldCover";
+		Cover.bInputIsNormalized = true;
+		Cover.inputMax = 1.0f;
+
+		UtilityAI->Actions.Add(Cover);
+	}
+
+	// Action Reposition
+	{
+		FUtilityAction Reposition;
+		Reposition.ActionName = "Reposition";
+		Reposition.InputKey = "RepositionInput";
+		Reposition.CurveType = EUtilityCurveType::Linear;
+		Reposition.CurveParamA = 1.0f;
+		Reposition.CurveParamB = 0.5f;
+		Reposition.BaseWeight = 0.7f;
+		Reposition.MultCounterAggresive = 0.85f;
+		Reposition.MultCounterStealthy = 1.1f;
+		Reposition.MultCounterCamper = 1.5f;
+		Reposition.OutputScoreKey = "RepositionScore";
+		Reposition.OutputBoolKey = "ShouldReposition";
+		Reposition.bInputIsNormalized = true;
+		Reposition.inputMax = 1.0f;
+		UtilityAI->Actions.Add(Reposition);
+	}
+
+	//Action Shoot
+	{
+		FUtilityAction Shoot;
+		Shoot.ActionName = "Shoot";
+		Shoot.InputKey = "ShootInput";
+		Shoot.CurveType = EUtilityCurveType::Exponential;
+		Shoot.CurveParamA = 1.5f;
+		Shoot.CurveParamB = 0.0f;
+		Shoot.BaseWeight = 0.8f;
+		Shoot.MultCounterAggresive = 0.95f;
+		Shoot.MultCounterStealthy = 1.0f;
+		Shoot.MultCounterCamper = 1.25f;
+		Shoot.OutputScoreKey = "ShootScore";
+		Shoot.OutputBoolKey = "ShouldShoot";
+		Shoot.bInputIsNormalized = true;
+		Shoot.inputMax = 1.0f;
+		UtilityAI->Actions.Add(Shoot);
+	}
+}
+
+void AEnemyMercenary::ConfigureDefaultUtilityActions()
+{
+
 	UtilityAI->EvaluationInterval = 0.5f;
 	UtilityAI->ActivationThreshold = 0.5f;
 	UtilityAI->StressSaturationLevel = 1.0f;
 
-	UtilityAI->Actions.Empty();
 
+	UtilityAI->Actions.Empty();
 	// Action: Reload
 	{
 		FUtilityAction Reload;
@@ -507,8 +612,64 @@ void AEnemyMercenary::ConfigureUtilityActions()
 
 		UtilityAI->Actions.Add(Cover);
 	}
+}
 
-	UtilityAI->SetEvaluationEnabled(true);
+void AEnemyMercenary::UpdateShootInput(UBlackboardComponent* Blackboard)
+{
+	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
+	if (!TargetPlayer)
+	{
+		Blackboard->SetValueAsFloat("ShootInput", 0.f);
+		Blackboard->SetValueAsBool("CanShootRifle", false);
+		return;
+	}
+
+	const bool bHasSight = Blackboard->GetValueAsBool("HasClearLineOfSight");
+	const bool bReloading = Blackboard->GetValueAsBool("IsReloading");
+
+	const float MagSize = EquippedWeapon ? (float)EquippedWeapon->GetMagazineSize() : 30.f;
+	const float CurrentAmmo = EquippedWeapon ? (float)EquippedWeapon->GetBulletCount() : AmmoCount;
+	const bool bHasAmmo = CurrentAmmo > 0.f;
+
+	const float Dist = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
+
+	const bool bInShootRange = Dist <= RifleMaxShootRange;
+	const bool bCanShoot = bInShootRange && bHasSight && !bReloading && bHasAmmo;
+	Blackboard->SetValueAsBool("CanShootRifle", bCanShoot);
+	
+	if(!bCanShoot)
+	{
+		Blackboard->SetValueAsFloat("ShootInput", 0.f);
+		return;
+	}
+
+	const float RangeQuality = FMath::Clamp(1.f - (Dist / RifleMaxShootRange) * 0.4f, 0.6f, 1.f);
+	const float AmmoFactor = (MagSize > 0.f) ? FMath::Clamp(CurrentAmmo / MagSize, 0.f, 1.f) : 0.f;
+
+	const float ShootInput = FMath::Clamp(0.7f * RangeQuality + 0.3f * AmmoFactor, 0.f, 1.f);
+	Blackboard->SetValueAsFloat("ShootInput", ShootInput);
+}
+
+void AEnemyMercenary::UpdateRepositionInput(UBlackboardComponent* Blackboard)
+{
+	AActor* TargetPlayer = Cast<AActor>(Blackboard->GetValueAsObject(FName("TargetActor")));
+	if (!TargetPlayer)
+	{
+		Blackboard->SetValueAsFloat("RepositionInput", 0.f);
+		return;
+	}
+
+	const float Dist = FVector::Dist(GetActorLocation(), TargetPlayer->GetActorLocation());
+	const bool bHasSight = Blackboard->GetValueAsBool("HasClearLineOfSight");
+
+	const float FarFactor = FMath::Clamp((Dist - RifleIdealRange) / RepositionDistanceThreshold, 0.f, 1.f);
+	const float TooCloseDistance = RifleIdealRange * 0.8f;
+	const float CloseFactor = (Dist < TooCloseDistance) ? FMath::Clamp((TooCloseDistance - Dist) / (TooCloseDistance * 0.6f), 0.f, 1.f) : 0.f;
+	const float SightFactor = bHasSight ? 0.f : 1.f;
+	const float RepositionInput = FMath::Clamp(FMath::Max3(FarFactor, CloseFactor, SightFactor), 0.f, 1.f);
+
+	Blackboard->SetValueAsFloat("RepositionInput", RepositionInput);
+	Blackboard->SetValueAsVector("RepositionLocation", CalculateRiflePosition(TargetPlayer));
 }
 
 void AEnemyMercenary::UpdateUtilityInputs()
@@ -523,6 +684,13 @@ void AEnemyMercenary::UpdateUtilityInputs()
 
 	UpdateReloadInput(Blackboard);
 	UpdateCoverInput(Blackboard);
+
+	if (RoleType == EEnemyRole::Rifle)
+	{
+		UpdateRepositionInput(Blackboard);
+		UpdateShootInput(Blackboard);
+	}
+
 	UpdateAdaptativeProfile();
 }
 
@@ -536,7 +704,7 @@ void AEnemyMercenary::UpdateReloadInput(UBlackboardComponent* Blackboard)
 	const float AmmoPct = (MagSize > 0.f) ? FMath::Clamp(CurrentAmmo / MagSize, 0.f, 1.f) : 0.f;
 	Blackboard->SetValueAsFloat("AmmoPct", AmmoPct);
 
-	if (RoleType == EEnemyRole::Shotgun && bIsInCombat)
+	if ((RoleType == EEnemyRole::Shotgun || RoleType == EEnemyRole::Rifle) && bIsInCombat)
 	{
 		const bool bWantsReload = Blackboard->GetValueAsBool("ShouldReload");
 		const bool bAlreadyReoad = Blackboard->GetValueAsBool("IsReloading");
@@ -728,6 +896,36 @@ FVector AEnemyMercenary::CalculateSniperPosition(AActor* Target)
 		return NavResult.Location;
 	}
 	return MyLocation;
+}
+
+FVector AEnemyMercenary::CalculateRiflePosition(AActor* Target)
+{
+	if (!Target)
+	{
+		return GetActorLocation();
+	}
+
+	const FVector MyLocation = GetActorLocation();
+	const FVector TargetLocation = Target->GetActorLocation();
+
+	FVector AwayDirection = (MyLocation - TargetLocation).GetSafeNormal();
+	if(AwayDirection.IsNearlyZero())
+	{
+		AwayDirection = GetActorForwardVector();
+	}
+	const FVector RightDirection = FVector::CrossProduct(AwayDirection, FVector::UpVector).GetSafeNormal();
+	const float LateralOffset = FMath::RandRange(-300.f, 300.f);
+
+	const FVector IdealPosition = TargetLocation + AwayDirection * RifleIdealRange + RightDirection * LateralOffset;
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	FNavLocation NavResult;
+
+	if(NavSys && NavSys->ProjectPointToNavigation(IdealPosition, NavResult, FVector(600.f, 600.f, 500.f)))
+	{
+		return NavResult.Location;
+	}
+	return IdealPosition;
 }
 
 void AEnemyMercenary::PerformSuppressionFire(FVector TargetLocation)

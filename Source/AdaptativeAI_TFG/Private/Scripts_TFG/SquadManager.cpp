@@ -57,12 +57,6 @@ void ASquadManager::OrganizeSquads()
 			}
 
 			NewSquad->InitializeSquad(GroupOf5);
-
-			if (GEngine)
-			{
-				FString DebugMsg = FString::Printf(TEXT("Escuadron %d Creado! Miembros: %d."), SquadCounter, GroupOf5.Num());
-				GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, DebugMsg);
-			}
 		}
 
 		SquadCounter++;

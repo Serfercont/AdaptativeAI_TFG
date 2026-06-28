@@ -261,12 +261,6 @@ void AEnemySquad::CoordinateDefensiveRetreat()
 	}
 
 	DefenseInitPosition = LastRecordedPlayerPosition;
-
-	if(GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red,
-			FString::Printf(TEXT("Escuadron: RETIRADA DEFENSIVA COORDINADA! %d mercenarios se reagrupan"), ActiveMembers.Num()));
-	}
 }
 
 void AEnemySquad::CancelDefensiveRetreat()
@@ -399,12 +393,6 @@ void AEnemySquad::AlertAllMembers(AActor* TargetPlayer)
 			Member->EnterCombat();
 		}
 	}
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red,
-			FString::Printf(TEXT("Escuadron: ALERTA TOTAL! %d mercenarios atacan"), SquadMembers.Num()));
-	}
 }
 
 void AEnemySquad::CoordinateFlankAndSupress()
@@ -459,12 +447,6 @@ void AEnemySquad::CoordinateFlankAndSupress()
 		}
 	}
 
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange,
-			FString::Printf(TEXT("FLANQUEO: %d supresores, %d flanqueadores"), NumSuppressors, NumFlankers));
-	}
-
 	FlankInitiatedAtPosition = LastRecordedPlayerPosition;
 }
 
@@ -477,11 +459,6 @@ void AEnemySquad::CancelFlanking()
 		{
 			Member->ClearCombatRole();
 		}
-	}
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green,
-			TEXT("FLANQUEO CANCELADO: Todos los miembros vuelven a ser supresores"));
 	}
 }
 

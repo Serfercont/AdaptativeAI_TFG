@@ -181,6 +181,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
 	FVector CalculateSniperPosition(AActor* Target);
 
+	UFUNCTION(BlueprintCallable, Category = "AI | Tactics")
+	FVector CalculateRiflePosition(AActor* Target);
+
 	UFUNCTION(BlueprintCallable, Category = "AI | Combat")
 	void PerformSuppressionFire(FVector TargetLocation);
 
@@ -216,6 +219,11 @@ public:
 		void UpdateCoverInput(class UBlackboardComponent* Blackboard);
 		void UpdateAdaptativeProfile();
 		void ConfigureUtilityActions();
+		//Rifle specific utility actions
+		void ConfigureRifleUtilityActions();
+		void ConfigureDefaultUtilityActions();
+		void UpdateShootInput(class UBlackboardComponent* Blackboard);
+		void UpdateRepositionInput(class UBlackboardComponent* Blackboard);
 
 	UFUNCTION(BlueprintCallable)
 	void RefreshSuppressionFocalPoint(FVector NewTarget);
@@ -265,6 +273,15 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "AI | Tactics")
 	float CoverDistanceAdvantage = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Utility")
+	float RifleIdealRange = 1400.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Utility")
+	float RifleMaxShootRange = 5000.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "AI | Utility")
+	float RepositionDistanceThreshold = 4200.f;
 
 	float GetAimSpreadForDistance(float Distance) const;
 

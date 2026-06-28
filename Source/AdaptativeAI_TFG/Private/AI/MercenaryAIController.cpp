@@ -55,6 +55,7 @@ void AMercenaryAIController::HandlePerceptionUpdate(AActor* Actor, FAIStimulus S
 	if (Stimulus.WasSuccessfullySensed())
 	{
 		GetWorldTimerManager().ClearTimer(LoseTargetTimerHandle);
+		GetWorldTimerManager().ClearTimer(FullForgetTimerHandle);
 
 		if(MercenaryPawn->bIsInCombat)
 		{
@@ -76,6 +77,21 @@ void AMercenaryAIController::HandlePerceptionUpdate(AActor* Actor, FAIStimulus S
 }
 
 void AMercenaryAIController::OnLostPlayerConfirmed()
+{
+	if (!MercenaryPawn)
+	{
+		return;
+	}
+
+	if(GetBlackboardComponent())
+	{
+		GetBlackboardComponent()->SetValueAsBool("IsPlayerVisible", false);
+	}
+
+	GetWorldTimerManager().SetTimer(FullForgetTimerHandle, this, &AMercenaryAIController::OnFullyLostPlayer, FullForgetTime, false);
+}
+
+void AMercenaryAIController::OnFullyLostPlayer()
 {
 	if (MercenaryPawn)
 	{
