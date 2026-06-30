@@ -135,4 +135,7 @@ public:
 	// Active when the health of the infected is low, doing a powerful jump attack that can hit the player from a distance.
 	UFUNCTION(BlueprintCallable, Category = "AI | Abilities")
 	void FinalAttackJump(AActor* TargetPlayer);
+
+	UFUNCTION(BlueprintCallable, Category = "AI | Debug")
+	FString GetDebugStateText() const;
 };

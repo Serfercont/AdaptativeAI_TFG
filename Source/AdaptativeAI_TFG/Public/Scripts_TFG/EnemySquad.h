@@ -51,7 +51,7 @@ protected:
 	float KillWindowDuration = 15.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Squad")
-	int32 agressiveKillThreshold = 4;
+	int32 agressiveKillThreshold = 5;
 
 
 	bool ResolvePlayerTarget(FVector& OutPlayerPosition, AActor*& OutTargetPlayer);

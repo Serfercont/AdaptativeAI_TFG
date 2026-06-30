@@ -20,7 +20,7 @@ AAEnemyInfected::AAEnemyInfected()
 	AlertRadius = 5000.f;
 	bIsDodging = false;
 	LastDodgeTime = -15.f;
-	Damage = 20.f;
+	Damage = 70.f;
 	AttackRange = 150.f;
 	AttackCooldown = 1.5f;
 
@@ -30,12 +30,14 @@ AAEnemyInfected::AAEnemyInfected()
 void AAEnemyInfected::BeginPlay()
 {
 	Super::BeginPlay();
+	GlobalDamageRecords.Empty();
+
 	ConfigureUtilityActions();
 
 	UpdateBlackboardValues();
 	UpdateUtilityInputs();
 
-	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this,&AAEnemyInfected::UpdateUtilityInputs, 0.5f, true);
+	GetWorldTimerManager().SetTimer(UtilityTimerHandle, this,&AAEnemyInfected::UpdateUtilityInputs, 0.2f, true);
 }
 
 void AAEnemyInfected::ConfigureUtilityActions()
@@ -56,10 +58,10 @@ void AAEnemyInfected::ConfigureUtilityActions()
 		FUtilityAction Flee;
 		Flee.ActionName				= "Flee";
 		Flee.InputKey				= "FleeInput";
-		Flee.CurveType				= EUtilityCurveType::Exponential;
-		Flee.CurveParamA			= 2.0f;
+		Flee.CurveType				= EUtilityCurveType::Linear;
+		Flee.CurveParamA			= 1.0f;
 		Flee.CurveParamB			= 0.0f;
-		Flee.BaseWeight				= 0.8f;
+		Flee.BaseWeight				= 0.9f;
 		Flee.OutputScoreKey			= "FleeScore";
 		Flee.OutputBoolKey			= "ShouldFlee";
 		Flee.bInputIsNormalized		= true;
@@ -197,7 +199,7 @@ void AAEnemyInfected::UpdateBlackboardValues()
 
 		for (AActor* Actor : FoundActors)
 		{
-			if (Actor != this && FVector::Dist(Actor->GetActorLocation(), GetActorLocation()) <= 2500.0f)
+			if (Actor != this && FVector::Dist(Actor->GetActorLocation(), GetActorLocation()) <= 2000.0f)
 			{
 				AlliesCount++;
 			}
@@ -221,11 +223,6 @@ void AAEnemyInfected::UpdateBlackboardValues()
 		//Dodge Logic
 		float CurrentTime = GetWorld()->GetTimeSeconds();
 		float RecentDamage = GetRecentGlobalDamage(CurrentTime, 2.f);
-
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(1, 0.5f, FColor::Yellow, FString::Printf(TEXT("Daño global (2s): %f"), RecentDamage));
-		}
 
 		if (!bIsDodging && RecentDamage >= 50.f)
 		{
@@ -278,8 +275,9 @@ void AAEnemyInfected::UpdateFleeInput(UBlackboardComponent* BlackboardComp)
 
 	const int32 NearbyAllies = BlackboardComp->GetValueAsInt("NearbyAllies");
 	const float LowHealthFactor = 1.f - HealthPct;
-	const float AloneFactor = (NearbyAllies <= 0) ? 1.f : 0.f;
-	const float FleeInput = LowHealthFactor * AloneFactor;
+
+	const float AloneFactor = (NearbyAllies <= 0) ? 1.f : 0.6f;
+	const float FleeInput = FMath::Clamp(LowHealthFactor * AloneFactor, 0.f, 1.f);
 
 	BlackboardComp->SetValueAsFloat("FleeInput", FleeInput);
 }
@@ -404,7 +402,7 @@ FVector AAEnemyInfected::CalculateDodgeLocation(AActor* TargetPlayer)
 	FVector RightVector = FVector::CrossProduct(ToPlayer, FVector::UpVector);
 
 	float RandomDirection = FMath::RandBool() ? 1.f : -1.f;
-	float DodgeAmplitude = FMath::RandRange(150.f, 220.f);
+	float DodgeAmplitude = FMath::RandRange(180.f, 250.f);
 	float ForwardOffset = FMath::RandRange(350.f, 650.f);
 
 	if (DistanceToPlayer < ForwardOffset)
@@ -417,7 +415,7 @@ FVector AAEnemyInfected::CalculateDodgeLocation(AActor* TargetPlayer)
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
 	FNavLocation NavLocation;
 
-	return PlayerLocation;
+	return DodgeLocation;
 }
 
 void AAEnemyInfected::EnterFuryMode()
@@ -489,6 +487,51 @@ void AAEnemyInfected::FinalAttackJump(AActor* TargetPlayer)
 
 		LaunchCharacter(LaunchVelocity, true, true);
 	}
+}
+
+FString AAEnemyInfected::GetDebugStateText() const
+{
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if(!AIController || !AIController->GetBlackboardComponent())
+	{
+		return TEXT("No Controller or Blackboard");
+	}
+
+	UBlackboardComponent* BlackboardComp = AIController->GetBlackboardComponent();
+
+	if(BlackboardComp->GetValueAsBool("IsFuryMode"))
+	{
+		return TEXT("Fury Mode");
+	}
+	if(BlackboardComp->GetValueAsBool("ShouldFlee"))
+	{
+		return TEXT("Huyendo");
+	}
+	if(BlackboardComp->GetValueAsBool("ShouldFinalJump"))
+	{
+		return TEXT("Salto");
+	}
+	if(BlackboardComp->GetValueAsBool("ShouldThrow"))
+	{
+		return TEXT("Lanzando");
+	}
+	if(BlackboardComp->GetValueAsBool("IsDodging"))
+	{
+		return TEXT("Esquivando");
+	}
+
+	AActor* TargetActor = Cast<AActor>(BlackboardComp->GetValueAsObject("TargetActor"));
+	if(TargetActor)
+	{
+		float DistanceToPlayer = BlackboardComp->GetValueAsFloat("DistanceToPlayer");
+		if(DistanceToPlayer <= 150.f)
+		{
+			return TEXT("Atacando");
+		}
+		return TEXT("Persiguiendo");
+	}
+
+	return TEXT("Patrullando");
 }
 
 

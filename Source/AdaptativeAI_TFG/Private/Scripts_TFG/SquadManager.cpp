@@ -26,13 +26,28 @@ void ASquadManager::OrganizeSquads()
 	while(UnassignedMercenaries.Num() > 0)
 	{
 		TArray<AEnemyMercenary*> GroupOf5;
-		for(int32 i = 0; i < 5; i++)
+
+		AEnemyMercenary* FirstMember = UnassignedMercenaries[0];
+		if(!FirstMember)
 		{
-			if (UnassignedMercenaries.Num() > 0)
-			{
-				GroupOf5.Add(UnassignedMercenaries[0]);
-				UnassignedMercenaries.RemoveAt(0);
-			}
+			UnassignedMercenaries.RemoveAt(0);
+			continue;
+		}
+		GroupOf5.Add(FirstMember);
+		UnassignedMercenaries.RemoveAt(0);
+
+		const FVector FirstMemberLocation = FirstMember->GetActorLocation();
+		UnassignedMercenaries.Sort([FirstMemberLocation](const AEnemyMercenary& A, const AEnemyMercenary& B)
+		{
+				const float DistA = FVector::DistSquared(A.GetActorLocation(), FirstMemberLocation);
+				const float DistB = FVector::DistSquared(B.GetActorLocation(), FirstMemberLocation);
+				return DistA < DistB;
+		});
+
+		while(GroupOf5.Num() < 5 && UnassignedMercenaries.Num() > 0)
+		{
+			GroupOf5.Add(UnassignedMercenaries[0]);
+			UnassignedMercenaries.RemoveAt(0);
 		}
 
 		AEnemySquad* NewSquad = GetWorld()->SpawnActor<AEnemySquad>(AEnemySquad::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
