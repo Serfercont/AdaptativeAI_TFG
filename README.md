@@ -18,11 +18,7 @@
 - [How to Play](#how-to-play)
 - [Controls](#controls)
 - [System Architecture](#system-architecture)
-- [Build & Run](#build--run)
-- [Validation Results](#validation-results)
-- [Project Status & Roadmap](#project-status--roadmap)
 - [Author](#author)
-- [License](#license)
 
 ---
 
