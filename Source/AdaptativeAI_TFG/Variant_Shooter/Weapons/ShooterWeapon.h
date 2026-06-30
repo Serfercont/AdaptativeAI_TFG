@@ -177,4 +177,26 @@ public:
 
 	/** Returns the current bullet count */
 	int32 GetBulletCount() const { return CurrentBullets; }
+
+	void Reload()
+	{
+		CurrentBullets = MagazineSize;
+	}
+
+	void SetRefireRate(float NewRefireRate) {
+		RefireRate = NewRefireRate;
+	}
+
+	void SetMagazineSize(int32 NewMagazineSize) {
+		MagazineSize = NewMagazineSize;
+		CurrentBullets = NewMagazineSize;
+	}
+
+	void SetFullAuto(bool bNewFullAuto) {
+		bFullAuto = bNewFullAuto;
+	}
+
+	void SetAimVariance(float NewAimVariance) {
+		AimVariance = NewAimVariance;
+	}
 };
